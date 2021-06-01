@@ -1,0 +1,7 @@
+name: duality-cbf
+channels:
+  - defaults
+dependencies:
+  - python=2.7
+  - pip:
+    - -r ./requirements.txt
