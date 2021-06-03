@@ -140,11 +140,13 @@ class DualityController:
         u = opti.variable(2, self.__num_horizon_opt)
         cost = 0
         # hyperparameters
-        mat_Q = np.diag([100.0, 100.0, 0.0, 1.0])
+        mat_Q = np.diag([10.0, 10.0, 10.0, 1.0])
         mat_R = np.diag([0.0, 0.0])
+        mat_Rold = np.diag([1.0, 1.0])
+        mat_dR = np.diag([1.0, 1.0])
         pomega = 1.0
         amin, amax = -1.0, 1.0
-        omegamin, omegamax = -2.0, 2.0
+        omegamin, omegamax = -1.0, 1.0
         # initial condition
         opti.subject_to(x[:, 0] == self._state)
         # get reference trajectory from local planner
@@ -163,6 +165,10 @@ class DualityController:
             cost += ca.mtimes(x_diff.T, ca.mtimes(mat_Q, x_diff))
             # input stage cost
             cost += ca.mtimes(u[:, i].T, ca.mtimes(mat_R, u[:, i]))
+        # input cost
+        cost += ca.mtimes((u[:, 0] - self._input).T, ca.mtimes(mat_Rold, (u[:, 0] - self._input)))
+        for i in range(self.__num_horizon_opt - 1):
+            cost += ca.mtimes((u[:, i + 1] - u[:, i]).T, ca.mtimes(mat_dR, (u[:, i + 1] - u[:, i])))
         # obstacle avoidance
         if self._obstacles != None:
             for obs in self._obstacles:
@@ -262,6 +268,7 @@ class DualityController:
     def animate_world(self):
         print("Generate animation")
         fig, ax = plt.subplots()
+        plt.axis("equal")
         # plot robot's global path
         global_path = self._planner.global_path()
         ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
