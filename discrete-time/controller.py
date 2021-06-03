@@ -3,11 +3,12 @@ import sympy as sp
 import casadi as ca
 import math, datetime
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+import matplotlib.patches as patches
+from matplotlib import animation
 import utils
 
 
-class Model:
+class DubinCarDyn:
     @staticmethod
     def forward_dynamics(x, u, timestep):
         """Return updated state in a form of `np.ndnumpy`
@@ -30,12 +31,34 @@ class Model:
         v_symbol_next = x_symbol[2] + u_symbol[0] * timestep
         theta_symbol_next = x_symbol[3] + u_symbol[1] * timestep
         state_symbol_next = ca.vertcat(x_symbol_next, y_symbol_next, v_symbol_next, theta_symbol_next)
-        return ca.Function("dubin_dynamics", [x_symbol, u_symbol], [state_symbol_next])
+        return ca.Function("dubin_car_dyn", [x_symbol, u_symbol], [state_symbol_next])
+
+
+class DubinCarGeo:
+    def __init__(self, length, width):
+        self.__length = length
+        self.__width = width
+        self.__region = utils.RectangleRegion(-length / 2, length / 2, -width / 2, width / 2)
+
+    def get_params(self):
+        return self.__length, self.__width
+
+    def get_convex_rep(self):
+        return self.__region.get_convex_rep()
 
 
 class DualityController:
     def __init__(
-        self, sys_timestep, sim_timestep, ctrl_timestep, num_horizon_opt, num_horizon_cbf, gamma, dist_margin,
+        self,
+        sys_timestep,
+        sim_timestep,
+        ctrl_timestep,
+        vehicle_length,
+        vehicle_width,
+        num_horizon_opt,
+        num_horizon_cbf,
+        gamma,
+        dist_margin,
     ):
         # System
         self._state = None
@@ -47,7 +70,8 @@ class DualityController:
         self._planner = None
         # System model
         self.__ctrl_timestep = ctrl_timestep
-        self.__dynamics_opt = Model.forward_dynamics_opt(ctrl_timestep)
+        self.__dynamics_model = DubinCarDyn.forward_dynamics_opt(ctrl_timestep)
+        self.__geometry_model = DubinCarGeo(vehicle_length, vehicle_width)
         # Optimal control with obstacle avoidance
         self.__num_horizon_opt = num_horizon_opt
         self.__num_horizon_cbf = num_horizon_cbf
@@ -57,7 +81,7 @@ class DualityController:
         # Logging
         self._state_log = []
         self._input_log = []
-        self._localpath_log = []
+        self._local_path_log = []
         self._openloop_state_log = []
 
     def set_state(self, x):
@@ -76,6 +100,9 @@ class DualityController:
         for obs in obs_list:
             self.add_obstacle(obs)
 
+    def set_obstacle_avoidance_policy(self, policy):
+        self._obstacle_avoidance_policy = policy
+
     def dynamics(self):
         # Logging
         self._state_log.append(self._state)
@@ -83,7 +110,7 @@ class DualityController:
         # Simulate the dynamical system
         count = 0
         while self.__sim_timestep * count < self.__sys_timestep:
-            self._state = Model.forward_dynamics(self._state, self._input, self.__sim_timestep)
+            self._state = DubinCarDyn.forward_dynamics(self._state, self._input, self.__sim_timestep)
             count += 1
         self._time += self.__sys_timestep
 
@@ -113,15 +140,15 @@ class DualityController:
         u = opti.variable(2, self.__num_horizon_opt)
         cost = 0
         # hyperparameters
-        mat_Q = np.diag([100.0, 100.0])
-        mat_R = np.diag([1.0, 0.0])
-        pomega = 10.0
+        mat_Q = np.diag([100.0, 100.0, 0.0, 1.0])
+        mat_R = np.diag([0.0, 0.0])
+        pomega = 1.0
         amin, amax = -1.0, 1.0
-        omegamin, omegamax = -1.0, 1.0
+        omegamin, omegamax = -2.0, 2.0
         # initial condition
         opti.subject_to(x[:, 0] == self._state)
         # get reference trajectory from local planner
-        localpath = self._planner.local_path(self._state[0:2])
+        local_path = self._planner.local_path(self._state[0:2])
         # input constraints / dynamics constraints / stage cost
         for i in range(self.__num_horizon_opt):
             # input constraints
@@ -130,21 +157,18 @@ class DualityController:
             opti.subject_to(u[1, i] <= omegamax)
             opti.subject_to(omegamin <= u[1, i])
             # dynamics constraints
-            opti.subject_to(x[:, i + 1] == self.__dynamics_opt(x[:, i], u[:, i]))
+            opti.subject_to(x[:, i + 1] == self.__dynamics_model(x[:, i], u[:, i]))
             # state stage cost
-            x_diff = x[0:2, i] - localpath[i, :]
+            x_diff = x[:, i] - local_path[i, :]
             cost += ca.mtimes(x_diff.T, ca.mtimes(mat_Q, x_diff))
             # input stage cost
             cost += ca.mtimes(u[:, i].T, ca.mtimes(mat_R, u[:, i]))
         # obstacle avoidance
         if self._obstacles != None:
-            obstacle_avoidance_policy = "point2region"
-            # obstacle_avoidance_policy = "region2region"
-            # construct robot region
-            robot_region = utils.RectangleRegion(-0.02, 0.02, -0.04, 0.04)
-            robot_G, robot_g = robot_region.get_convex_rep()
             for obs in self._obstacles:
-                if obstacle_avoidance_policy == "point2region":
+                # get current value of cbf
+                mat_A, vec_b = obs.get_convex_rep()
+                if self._obstacle_avoidance_policy == "point2region":
                     # get current value of cbf
                     mat_A, vec_b = obs.get_convex_rep()
                     cbf_curr = utils.get_dist_point_to_region(self._state[0:2], mat_A, vec_b)
@@ -161,8 +185,8 @@ class DualityController:
                         opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
                         opti.subject_to(omega[i] >= 0)
                         cost += pomega * (omega[i] - 1) ** 2
-                if obstacle_avoidance_policy == "region2region":
-                    mat_A, vec_b = obs.get_convex_rep()
+                if self._obstacle_avoidance_policy == "region2region":
+                    robot_G, robot_g = self.__geometry_model.get_convex_rep()
                     # get current value of cbf
                     cbf_curr = utils.get_dist_region_to_region(
                         mat_A,
@@ -175,13 +199,27 @@ class DualityController:
                     mu = opti.variable(vec_b.shape[0], self.__num_horizon_cbf)
                     omega = opti.variable(self.__num_horizon_cbf, 1)
                     for i in range(self.__num_horizon_cbf):
+                        robot_R = ca.hcat(
+                            [
+                                ca.vcat([ca.cos(x[2, i + 1]), ca.sin(x[2, i + 1])]),
+                                ca.vcat([-ca.sin(x[2, i + 1]), ca.cos(x[2, i + 1])]),
+                            ]
+                        )
+                        robot_T = x[0:2, i + 1]
                         opti.subject_to(lamb[:, i] >= 0)
                         opti.subject_to(mu[:, i] >= 0)
                         opti.subject_to(
-                            -np.dot(robot_g.T, mu[:, i])
-                            + ca.mtimes((ca.mtimes(mat_A, x[0:2, i + 1]) - vec_b).T, lamb[:, i])
+                            -ca.mtimes(robot_g.T, mu[:, i])
+                            + ca.mtimes((ca.mtimes(mat_A, robot_T) - vec_b).T, lamb[:, i])
                             >= omega[i] * self._gamma ** (i + 1) * cbf_curr + self._dist_margin
                         )
+                        opti.subject_to(
+                            ca.mtimes(robot_G.T, mu[:, i]) + ca.mtimes(ca.mtimes(robot_R.T, mat_A.T), lamb[:, i]) == 0
+                        )
+                        temp = ca.mtimes(mat_A.T, lamb[:, i])
+                        opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
+                        opti.subject_to(omega[i] >= 0)
+                        cost += pomega * (omega[i] - 1) ** 2
         # solve optimization
         opti.minimize(cost)
         option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
@@ -193,18 +231,19 @@ class DualityController:
         print("solver time: ", delta_timer.total_seconds())
         self._input = opt_sol.value(u[:, 0])
         # Logging
-        self._localpath_log.append(localpath)
+        self._local_path_log.append(local_path)
         self._openloop_state_log.append(opt_sol.value(x).T)
 
     def plot_world(self):
         print("Generate plotting")
         fig, ax = plt.subplots()
+        plt.axis("equal")
         # plot robot's global path
         global_path = self._planner.global_path()
         ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
         # plot robot's closed-loop trajectory
-        robot_states = np.vstack(self._state_log)
-        ax.plot(robot_states[:, 0], robot_states[:, 1], "k-", linewidth=2, markersize=4)
+        closedloop_states = np.vstack(self._state_log)
+        ax.plot(closedloop_states[:, 0], closedloop_states[:, 1], "k-", linewidth=2, markersize=4)
         # plot obstacles
         if self._obstacles != None:
             for obs in self._obstacles:
@@ -227,8 +266,8 @@ class DualityController:
         global_path = self._planner.global_path()
         ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
         # plot robot's closed-loop trajectory
-        robot_states = np.vstack(self._state_log)
-        ax.plot(robot_states[:, 0], robot_states[:, 1], "k-", linewidth=2, markersize=4)
+        closedloop_states = np.vstack(self._state_log)
+        ax.plot(closedloop_states[:, 0], closedloop_states[:, 1], "k-", linewidth=2, markersize=4)
         # plot obstacles
         if self._obstacles != None:
             for obs in self._obstacles:
@@ -236,19 +275,54 @@ class DualityController:
                 ax.add_patch(rec_patch)
         tpsan = np.linspace(0, self._time, round(self._time / self.__sys_timestep) + 1)
         ### Initialize data for animation
-        frames = len(self._localpath_log)
+        frames = len(self._local_path_log)
         # initialize local reference trajectory
-        localpath = self._localpath_log[0]
-        (line_localpath,) = ax.plot(localpath[:, 0], localpath[:, 1])
+        local_path = self._local_path_log[0]
+        (line_localpath,) = ax.plot(local_path[:, 0], local_path[:, 1])
         # initialize open-loop trajectory
         openloop_state = self._openloop_state_log[0]
         (line_openloop_state,) = ax.plot(openloop_state[:, 0], openloop_state[:, 1])
+        if self._obstacle_avoidance_policy == "region2region":
+            # initialize vehicle
+            polygon_points = np.array([[1.0, 1.0], [1.0, -1.0], [-1.0, -1.0], [-1.0, 1.0]])
+            vehicle_polygon = patches.Polygon(
+                polygon_points, alpha=1.0, closed=True, fc="None", ec="tab:brown", zorder=10, linewidth=2
+            )
+            ax.add_patch(vehicle_polygon)
 
         def update(index):
-            localpath = self._localpath_log[index]
-            openloop_state = self._openloop_state_log[index]
+            # update local reference trajectory
+            localpath = self._local_path_log[index]
             line_localpath.set_data(localpath[:, 0], localpath[:, 1])
+            # update open-loop trajectory
+            openloop_state = self._openloop_state_log[index]
             line_openloop_state.set_data(openloop_state[:, 0], openloop_state[:, 1])
+            if self._obstacle_avoidance_policy == "region2region":
+                # update vehicle
+                length, width = self.__geometry_model.get_params()
+                x, y, theta = closedloop_states[index, 0], closedloop_states[index, 1], closedloop_states[index, 3]
+                vehicle_points = np.array(
+                    [
+                        [
+                            x + length / 2 * np.cos(theta) - width / 2 * np.sin(theta),
+                            y + length / 2 * np.sin(theta) + width / 2 * np.cos(theta),
+                        ],
+                        [
+                            x + length / 2 * np.cos(theta) + width / 2 * np.sin(theta),
+                            y + length / 2 * np.sin(theta) - width / 2 * np.cos(theta),
+                        ],
+                        [
+                            x - length / 2 * np.cos(theta) + width / 2 * np.sin(theta),
+                            y - length / 2 * np.sin(theta) - width / 2 * np.cos(theta),
+                        ],
+                        [
+                            x - length / 2 * np.cos(theta) - width / 2 * np.sin(theta),
+                            y - length / 2 * np.sin(theta) + width / 2 * np.cos(theta),
+                        ],
+                    ]
+                )
+                vehicle_polygon.set_xy(vehicle_points)
 
-        anim = FuncAnimation(fig, update, frames=frames, interval=100)
-        anim.save("animation/world.gif", dpi=200, writer="imagemagick")
+        anim = animation.FuncAnimation(fig, update, frames=frames, interval=100)
+        anim.save("animation/world.gif", dpi=200, writer=animation.PillowWriter(fps=30))
+
