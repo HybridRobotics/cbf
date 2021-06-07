@@ -140,7 +140,7 @@ class DualityController:
         u = opti.variable(2, self.__num_horizon_opt)
         cost = 0
         # hyperparameters
-        mat_Q = np.diag([10.0, 10.0, 10.0, 1.0])
+        mat_Q = np.diag([100.0, 100.0, 10.0, 1.0])
         mat_R = np.diag([0.0, 0.0])
         mat_Rold = np.diag([1.0, 1.0])
         mat_dR = np.diag([1.0, 1.0])
@@ -198,7 +198,7 @@ class DualityController:
                         mat_A,
                         vec_b,
                         np.dot(robot_G, self.get_rotation().T),
-                        np.dot(np.dot(robot_G, self.get_rotation().T), self.get_translation()),
+                        np.dot(np.dot(robot_G, self.get_rotation().T), self.get_translation()) + robot_g,
                     )
                     # duality-cbf constraints
                     lamb = opti.variable(mat_A.shape[0], self.__num_horizon_cbf)
@@ -207,8 +207,8 @@ class DualityController:
                     for i in range(self.__num_horizon_cbf):
                         robot_R = ca.hcat(
                             [
-                                ca.vcat([ca.cos(x[2, i + 1]), ca.sin(x[2, i + 1])]),
-                                ca.vcat([-ca.sin(x[2, i + 1]), ca.cos(x[2, i + 1])]),
+                                ca.vcat([ca.cos(x[3, i + 1]), ca.sin(x[3, i + 1])]),
+                                ca.vcat([-ca.sin(x[3, i + 1]), ca.cos(x[3, i + 1])]),
                             ]
                         )
                         robot_T = x[0:2, i + 1]

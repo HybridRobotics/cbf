@@ -56,7 +56,7 @@ def main():
     # controller.set_obstacle_avoidance_policy("point2region")
     controller.set_obstacle_avoidance_policy("region2region")
     # Setup simulation
-    simulation_time = 20.0
+    simulation_time = 5.0
     controller.sim(simulation_time)
     controller.plot_world()
     controller.plot_states()
