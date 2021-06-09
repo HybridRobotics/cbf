@@ -5,6 +5,8 @@ from controller import DualityController
 
 
 def generate_planner():
+    # Provide at least 2 distinct waypoints
+    # globalpath = np.array([[0.0, 0.2], [0.1, 0.2]])
     globalpath = np.array([[0.0, 0.2], [0.5, 0.2], [0.5, 0.8], [1.0, 0.8]])
     reference_speed = 0.2
     num_horizon = 4
