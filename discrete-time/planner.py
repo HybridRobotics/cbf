@@ -8,6 +8,7 @@ class Planner:
         # global path
         self._global_path = globalpath
         self._global_path_index = 0
+        self._N_wp = np.shape(globalpath)[0]
         # local path
         self._reference_speed = reference_speed
         self._num_horizon = num_horizon
@@ -27,6 +28,11 @@ class Planner:
         # initialize node index
         local_index = self._global_path_index
         curr_node = self._global_path[local_index, :]
+        if local_index == self._N_wp-1:
+            prev_vec = curr_node - self._global_path[self._N_wp-2, :]
+            prev_head = math.atan2(prev_vec[1], prev_vec[0])
+            point = np.array([[curr_node[0], curr_node[1], 0.0, prev_head]])
+            return np.kron(np.ones((self._num_horizon,1)), point)
         next_node = self._global_path[local_index + 1, :]
         curv_vec = next_node - curr_node
         curv_length = np.linalg.norm(curv_vec)
@@ -47,6 +53,10 @@ class Planner:
             while curv_dist >= curv_length:
                 curv_dist -= curv_length
                 local_index += 1
+                if local_index == self._N_wp-1:
+                    curv_direct = np.array([0.0, 0.0])
+                    curv_length = 1.0
+                    continue
                 curr_node = self._global_path[local_index, :]
                 next_node = self._global_path[local_index + 1, :]
                 curv_vec = next_node - curr_node
