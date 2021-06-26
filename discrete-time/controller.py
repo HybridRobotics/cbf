@@ -128,8 +128,8 @@ class DualityController:
     def get_rotation(self):
         return np.array(
             [
-                [math.cos(self._state[3]), math.sin(self._state[3])],
-                [-math.sin(self._state[3]), math.cos(self._state[3])],
+                [math.cos(self._state[3]), -math.sin(self._state[3])],
+                [math.sin(self._state[3]), math.cos(self._state[3])],
             ]
         )
 
@@ -197,12 +197,12 @@ class DualityController:
                     cbf_curr = utils.get_dist_region_to_region(
                         mat_A,
                         vec_b,
-                        np.dot(robot_G, self.get_rotation().T),
-                        np.dot(np.dot(robot_G, self.get_rotation().T), self.get_translation()) + robot_g,
+                        robot_G @ self.get_rotation().T,
+                        robot_G @ self.get_rotation().T @ self.get_translation() + robot_g,
                     )
                     # duality-cbf constraints
                     lamb = opti.variable(mat_A.shape[0], self.__num_horizon_cbf)
-                    mu = opti.variable(vec_b.shape[0], self.__num_horizon_cbf)
+                    mu = opti.variable(robot_G.shape[0], self.__num_horizon_cbf)
                     omega = opti.variable(self.__num_horizon_cbf, 1)
                     for i in range(self.__num_horizon_cbf):
                         robot_R = ca.hcat(
