@@ -2,9 +2,22 @@ import numpy as np
 import casadi as ca
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from abc import ABC, abstractmethod
+import polytope as pt
 
 
-class RectangleRegion:
+class ConvexRegion2D(ABC):
+
+    @abstractmethod
+    def get_convex_rep (self):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_plot_patch (self):
+        raise NotImplementedError()
+
+
+class RectangleRegion(ConvexRegion2D):
     """[Rectangle shape]
     """
 
@@ -30,8 +43,31 @@ class RectangleRegion:
         )
 
 
-class ConvexRegion2D:
-    pass
+class PolytopeRegion(ConvexRegion2D):
+    """[Genral polytope shape]
+    """
+
+    def __init__(self, mat_A, vec_b):
+        self.mat_A = mat_A
+        self.vec_b = vec_b
+        self.points = pt.extreme(pt.Polytope(mat_A, vec_b))
+
+    @classmethod
+    def convex_hull(self, points):
+        P = pt.qhull(points)
+        return PolytopeRegion(P.A, P.b)
+
+    def get_convex_rep(self):
+        return self.mat_A, self.vec_b
+
+    def get_plot_patch(self):
+        return patches.Polygon(
+            self.points,
+            closed=True,
+            linewidth=1,
+            edgecolor="r",
+            facecolor="r",
+        )
 
 
 def get_dist_point_to_region(point, mat_A, vec_b):
