@@ -1,4 +1,4 @@
-name: duality-cbf
+name: cbf-duality
 channels:
   - defaults
 dependencies:
