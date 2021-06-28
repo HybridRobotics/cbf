@@ -197,8 +197,8 @@ class DualityController:
                     cbf_curr = utils.get_dist_region_to_region(
                         mat_A,
                         vec_b,
-                        robot_G @ self.get_rotation().T,
-                        robot_G @ self.get_rotation().T @ self.get_translation() + robot_g,
+                        np.dot(robot_G, self.get_rotation().T),
+                        np.dot(np.dot(robot_G, self.get_rotation().T), self.get_translation()) + robot_g,
                     )
                     # duality-cbf constraints
                     lamb = opti.variable(mat_A.shape[0], self.__num_horizon_cbf)
@@ -331,5 +331,5 @@ class DualityController:
                 vehicle_polygon.set_xy(vehicle_points)
 
         anim = animation.FuncAnimation(fig, update, frames=frames, interval=100)
-        anim.save("animation/world.gif", dpi=200, writer=animation.PillowWriter(fps=30))
+        anim.save("animation/world.gif", dpi=200, writer="imagemagick")
 
