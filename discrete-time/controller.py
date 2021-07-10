@@ -33,6 +33,15 @@ class DubinCarDyn:
         state_symbol_next = ca.vertcat(x_symbol_next, y_symbol_next, v_symbol_next, theta_symbol_next)
         return ca.Function("dubin_car_dyn", [x_symbol, u_symbol], [state_symbol_next])
 
+    @staticmethod
+    def nominal_safe_controller(x, timestep, amax, amin):
+        """Return updated state using nominal safe controller in a form of `np.ndnumpy`
+        """
+
+        u_nom = np.zeros(shape=(2,))
+        u_nom[0] = max(min(amax, -x[2] / timestep), amin)
+        return u_nom, DubinCarDyn.forward_dynamics(x, u_nom, timestep)
+
 
 class DubinCarGeo:
     def __init__(self, length, width):
@@ -177,7 +186,7 @@ class DualityController:
                 if self._obstacle_avoidance_policy == "point2region":
                     # get current value of cbf
                     mat_A, vec_b = obs.get_convex_rep()
-                    cbf_curr = utils.get_dist_point_to_region(self._state[0:2], mat_A, vec_b)
+                    cbf_curr, lamb_curr = utils.get_dist_point_to_region(self._state[0:2], mat_A, vec_b)
                     # duality-cbf constraints
                     lamb = opti.variable(mat_A.shape[0], self.__num_horizon_cbf)
                     omega = opti.variable(self.__num_horizon_cbf, 1)
@@ -191,10 +200,13 @@ class DualityController:
                         opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
                         opti.subject_to(omega[i] >= 0)
                         cost += pomega * (omega[i] - 1) ** 2
+                        # warm start
+                        opti.set_initial(lamb[:, i], lamb_curr)
+                        opti.set_initial(omega[i], 0.1)
                 if self._obstacle_avoidance_policy == "region2region":
                     robot_G, robot_g = self.__geometry_model.get_convex_rep()
                     # get current value of cbf
-                    cbf_curr = utils.get_dist_region_to_region(
+                    cbf_curr, lamb_curr, mu_curr = utils.get_dist_region_to_region(
                         mat_A,
                         vec_b,
                         np.dot(robot_G, self.get_rotation().T),
@@ -226,6 +238,16 @@ class DualityController:
                         opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
                         opti.subject_to(omega[i] >= 0)
                         cost += pomega * (omega[i] - 1) ** 2
+                        # warm start
+                        opti.set_initial(lamb[:, i], lamb_curr)
+                        opti.set_initial(mu[:, i], mu_curr)
+                        opti.set_initial(omega[i], 0.1)
+        # warm start
+        state_ws = self._state
+        for i in range(self.__num_horizon_opt):
+            u_ws, state_ws = DubinCarDyn.nominal_safe_controller(state_ws, self.__ctrl_timestep, amax, amin)
+            opti.set_initial(x[:, i+1], state_ws)
+            opti.set_initial(u[:, i], u_ws)
         # solve optimization
         opti.minimize(cost)
         option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}

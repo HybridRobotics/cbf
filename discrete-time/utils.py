@@ -71,7 +71,8 @@ def get_dist_point_to_region(point, mat_A, vec_b):
     point_in_region = opti.variable(mat_A.shape[-1], 1)
     cost = 0
     # constraints
-    opti.subject_to(ca.mtimes(mat_A, point_in_region) <= vec_b)
+    constraint = ca.mtimes(mat_A, point_in_region) <= vec_b
+    opti.subject_to(constraint)
     dist_vec = point - point_in_region
     cost += ca.mtimes(dist_vec.T, dist_vec)
     # solve optimization
@@ -79,7 +80,13 @@ def get_dist_point_to_region(point, mat_A, vec_b):
     option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
     opti.solver("ipopt", option)
     opt_sol = opti.solve()
-    return opt_sol.value(ca.norm_2(dist_vec))
+    # minimum distance & dual variables
+    dist = opt_sol.value(ca.norm_2(dist_vec))
+    if dist > 0:
+        lamb = opt_sol.value(opti.dual(constraint)) / (2 * dist)
+    else:
+        lamb = np.zeros(shape=(mat_A.shape[0],))
+    return dist, lamb
 
 
 def get_dist_region_to_region(mat_A1, vec_b1, mat_A2, vec_b2):
@@ -89,8 +96,10 @@ def get_dist_region_to_region(mat_A1, vec_b1, mat_A2, vec_b2):
     point2 = opti.variable(mat_A2.shape[-1], 1)
     cost = 0
     # constraints
-    opti.subject_to(ca.mtimes(mat_A1, point1) <= vec_b1)
-    opti.subject_to(ca.mtimes(mat_A2, point2) <= vec_b2)
+    constraint1 = ca.mtimes(mat_A1, point1) <= vec_b1
+    constraint2 = ca.mtimes(mat_A2, point2) <= vec_b2
+    opti.subject_to(constraint1)
+    opti.subject_to(constraint2)
     dist_vec = point1 - point2
     cost += ca.mtimes(dist_vec.T, dist_vec)
     # solve optimization
@@ -98,4 +107,12 @@ def get_dist_region_to_region(mat_A1, vec_b1, mat_A2, vec_b2):
     option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
     opti.solver("ipopt", option)
     opt_sol = opti.solve()
-    return opt_sol.value(ca.norm_2(dist_vec))
+    # minimum distance & dual variables
+    dist = opt_sol.value(ca.norm_2(dist_vec))
+    if dist > 0:
+        lamb = opt_sol.value(opti.dual(constraint1)) / (2 * dist)
+        mu = opt_sol.value(opti.dual(constraint2)) / (2 * dist)
+    else:
+        lamb = np.zeros(shape=(mat_A1.shape[0],))
+        mu = np.zeros(shape=(mat_A2.shape[0],))
+    return dist, lamb, mu
