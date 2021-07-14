@@ -42,6 +42,16 @@ class DubinCarDyn:
         u_nom[0] = max(min(amax, -x[2] / timestep), amin)
         return u_nom, DubinCarDyn.forward_dynamics(x, u_nom, timestep)
 
+    @staticmethod
+    def obstacle_filter_radius(x, timestep, amax, dist_margin):
+        """Return radius outside which to ignore obstacles
+        """
+
+        radius_safe_factor = 1.25
+        min_brake_dist_next = (abs(x[2]) + amax * timestep) ** 2 / (2 * amax) + dist_margin
+        return radius_safe_factor * min_brake_dist_next + abs(x[2]) * timestep + amax * timestep ** 2 / 2
+
+
 
 class DubinCarGeo:
     def __init__(self, length, width):
@@ -180,6 +190,7 @@ class DualityController:
             cost += ca.mtimes((u[:, i + 1] - u[:, i]).T, ca.mtimes(mat_dR, (u[:, i + 1] - u[:, i])))
         # obstacle avoidance
         if self._obstacles != None:
+            obs_filter_radius = DubinCarDyn.obstacle_filter_radius(self._state, self.__ctrl_timestep, amax, self._dist_margin)
             for obs in self._obstacles:
                 # get current value of cbf
                 mat_A, vec_b = obs.get_convex_rep()
@@ -187,6 +198,9 @@ class DualityController:
                     # get current value of cbf
                     mat_A, vec_b = obs.get_convex_rep()
                     cbf_curr, lamb_curr = utils.get_dist_point_to_region(self._state[0:2], mat_A, vec_b)
+                    # check if obstacle is outside filter radius
+                    if cbf_curr > obs_filter_radius:
+                        continue
                     # duality-cbf constraints
                     lamb = opti.variable(mat_A.shape[0], self.__num_horizon_cbf)
                     omega = opti.variable(self.__num_horizon_cbf, 1)
@@ -212,6 +226,9 @@ class DualityController:
                         np.dot(robot_G, self.get_rotation().T),
                         np.dot(np.dot(robot_G, self.get_rotation().T), self.get_translation()) + robot_g,
                     )
+                    # check if obstacle is outside filter radius
+                    if cbf_curr > obs_filter_radius:
+                        continue
                     # duality-cbf constraints
                     lamb = opti.variable(mat_A.shape[0], self.__num_horizon_cbf)
                     mu = opti.variable(robot_G.shape[0], self.__num_horizon_cbf)
