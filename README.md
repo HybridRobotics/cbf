@@ -1,6 +1,5 @@
-# Duality-based Control/Planning/Navigation using Control Barrier Functions
-This folder contains a collection of working using duality-based control/planning/navigation with control barrier functions.
+#### Environments
+* Create your environment via `conda env create -f environment.yml`. The default conda environment name is `cbf-duality`, and you could also choose that name with your own preferences by editing the .yml file.
 
-### Citing 
-If you find this project useful in your work, please consider citing following work:
-* A. Thirugnanam, J. Zeng and K. Sreenath. "A Duality-based Approach for Real-time Obstacle Avoidance between Polytopes with Control Barrier Functions". [[PDF]]() [[Code]](continuous-time) [[BibTeX]]()
+#### Testing
+* Run `python test.py`
