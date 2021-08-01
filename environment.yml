@@ -1,7 +1,7 @@
-name: cbf-duality
+name: cbf
 channels:
   - defaults
 dependencies:
-  - python=2.7
+  - python=3.6
   - pip:
     - -r ./requirements.txt

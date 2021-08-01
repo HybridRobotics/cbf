@@ -1,7 +1,8 @@
 import numpy as np
+
 import utils
-from planner import Planner
 from controller import DualityController
+from planner import Planner
 
 
 def generate_planner():
