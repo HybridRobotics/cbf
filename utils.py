@@ -1,8 +1,9 @@
-import numpy as np
-import casadi as ca
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from abc import ABCMeta
+
+import casadi as ca
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
 import polytope as pt
 
 
@@ -17,8 +18,7 @@ class ConvexRegion2D:
 
 
 class RectangleRegion(ConvexRegion2D):
-    """[Rectangle shape]
-    """
+    """[Rectangle shape]"""
 
     def __init__(self, left, right, down, up):
         self.left = left
@@ -43,8 +43,7 @@ class RectangleRegion(ConvexRegion2D):
 
 
 class PolytopeRegion(ConvexRegion2D):
-    """[Genral polytope shape]
-    """
+    """[Genral polytope shape]"""
 
     def __init__(self, mat_A, vec_b):
         self.mat_A = mat_A
@@ -64,8 +63,7 @@ class PolytopeRegion(ConvexRegion2D):
 
 
 def get_dist_point_to_region(point, mat_A, vec_b):
-    """Return distance between a point and a convex region
-    """
+    """Return distance between a point and a convex region"""
     opti = ca.Opti()
     # variables and cost
     point_in_region = opti.variable(mat_A.shape[-1], 1)

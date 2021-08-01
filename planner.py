@@ -1,7 +1,8 @@
+import math
+
 import numpy as np
 import sympy as sp
 from scipy.interpolate import interp1d
-import math
 
 
 class Planner:
@@ -16,13 +17,11 @@ class Planner:
         self._local_path_timestep = localpath_timestep
 
     def global_path(self):
-        """Return global path
-        """
+        """Return global path"""
         return self._global_path
 
     def local_path(self, pos):
-        """[Generate smooth trajectory with sampling waypoints to track]
-        """
+        """[Generate smooth trajectory with sampling waypoints to track]"""
         proj_dist_buffer = 0.05
 
         local_index = self._global_path_index
@@ -50,7 +49,12 @@ class Planner:
         )
 
         path_idx = np.searchsorted(curv_time, t_s, side="right") - 1
-        path = np.vstack([np.interp(t_s, curv_time, trunc_path[:, 0]), np.interp(t_s, curv_time, trunc_path[:, 1])]).T
+        path = np.vstack(
+            [
+                np.interp(t_s, curv_time, trunc_path[:, 0]),
+                np.interp(t_s, curv_time, trunc_path[:, 1]),
+            ]
+        ).T
         path_vel = self._reference_speed * np.ones((self._num_horizon, 1))
         path_head = np.arctan2(curv_vec[path_idx, 1], curv_vec[path_idx, 0]).reshape(self._num_horizon, 1)
         return np.hstack([path, path_vel, path_head])

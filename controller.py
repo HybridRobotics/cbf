@@ -1,18 +1,20 @@
+import datetime
+import math
+
+import casadi as ca
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
 import numpy as np
 import sympy as sp
-import casadi as ca
-import math, datetime
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from matplotlib import animation
+
 import utils
 
 
 class DubinCarDyn:
     @staticmethod
     def forward_dynamics(x, u, timestep):
-        """Return updated state in a form of `np.ndnumpy`
-        """
+        """Return updated state in a form of `np.ndnumpy`"""
         x_next = np.ndarray(shape=(4,), dtype=float)
         x_next[0] = x[0] + x[2] * math.cos(x[3]) * timestep
         x_next[1] = x[1] + x[2] * math.sin(x[3]) * timestep
@@ -22,8 +24,7 @@ class DubinCarDyn:
 
     @staticmethod
     def forward_dynamics_opt(timestep):
-        """Return updated state in a form of `ca.SX`
-        """
+        """Return updated state in a form of `ca.SX`"""
         x_symbol = ca.SX.sym("x", 4)
         u_symbol = ca.SX.sym("u", 2)
         x_symbol_next = x_symbol[0] + x_symbol[2] * ca.cos(x_symbol[3]) * timestep
@@ -35,8 +36,7 @@ class DubinCarDyn:
 
     @staticmethod
     def nominal_safe_controller(x, timestep, amax, amin):
-        """Return updated state using nominal safe controller in a form of `np.ndnumpy`
-        """
+        """Return updated state using nominal safe controller in a form of `np.ndnumpy`"""
 
         u_nom = np.zeros(shape=(2,))
         u_nom[0] = max(min(amax, -x[2] / timestep), amin)
@@ -44,13 +44,11 @@ class DubinCarDyn:
 
     @staticmethod
     def obstacle_filter_radius(x, timestep, amax, dist_margin):
-        """Return radius outside which to ignore obstacles
-        """
+        """Return radius outside which to ignore obstacles"""
 
         radius_safe_factor = 1.25
         min_brake_dist_next = (abs(x[2]) + amax * timestep) ** 2 / (2 * amax) + dist_margin
         return radius_safe_factor * min_brake_dist_next + abs(x[2]) * timestep + amax * timestep ** 2 / 2
-
 
 
 class DubinCarGeo:
@@ -190,7 +188,9 @@ class DualityController:
             cost += ca.mtimes((u[:, i + 1] - u[:, i]).T, ca.mtimes(mat_dR, (u[:, i + 1] - u[:, i])))
         # obstacle avoidance
         if self._obstacles != None:
-            obs_filter_radius = DubinCarDyn.obstacle_filter_radius(self._state, self.__ctrl_timestep, amax, self._dist_margin)
+            obs_filter_radius = DubinCarDyn.obstacle_filter_radius(
+                self._state, self.__ctrl_timestep, amax, self._dist_margin
+            )
             for obs in self._obstacles:
                 # get current value of cbf
                 mat_A, vec_b = obs.get_convex_rep()
@@ -224,7 +224,11 @@ class DualityController:
                         mat_A,
                         vec_b,
                         np.dot(robot_G, self.get_rotation().T),
-                        np.dot(np.dot(robot_G, self.get_rotation().T), self.get_translation()) + robot_g,
+                        np.dot(
+                            np.dot(robot_G, self.get_rotation().T),
+                            self.get_translation(),
+                        )
+                        + robot_g,
                     )
                     # check if obstacle is outside filter radius
                     if cbf_curr > obs_filter_radius:
@@ -263,7 +267,7 @@ class DualityController:
         state_ws = self._state
         for i in range(self.__num_horizon_opt):
             u_ws, state_ws = DubinCarDyn.nominal_safe_controller(state_ws, self.__ctrl_timestep, amax, amin)
-            opti.set_initial(x[:, i+1], state_ws)
+            opti.set_initial(x[:, i + 1], state_ws)
             opti.set_initial(u[:, i], u_ws)
         # solve optimization
         opti.minimize(cost)
@@ -288,7 +292,13 @@ class DualityController:
         ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
         # plot robot's closed-loop trajectory
         closedloop_states = np.vstack(self._state_log)
-        ax.plot(closedloop_states[:, 0], closedloop_states[:, 1], "k-", linewidth=2, markersize=4)
+        ax.plot(
+            closedloop_states[:, 0],
+            closedloop_states[:, 1],
+            "k-",
+            linewidth=2,
+            markersize=4,
+        )
         # plot obstacles
         if self._obstacles != None:
             for obs in self._obstacles:
@@ -313,7 +323,13 @@ class DualityController:
         ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
         # plot robot's closed-loop trajectory
         closedloop_states = np.vstack(self._state_log)
-        ax.plot(closedloop_states[:, 0], closedloop_states[:, 1], "k-", linewidth=2, markersize=4)
+        ax.plot(
+            closedloop_states[:, 0],
+            closedloop_states[:, 1],
+            "k-",
+            linewidth=2,
+            markersize=4,
+        )
         # plot obstacles
         if self._obstacles != None:
             for obs in self._obstacles:
@@ -332,7 +348,13 @@ class DualityController:
             # initialize vehicle
             polygon_points = np.array([[1.0, 1.0], [1.0, -1.0], [-1.0, -1.0], [-1.0, 1.0]])
             vehicle_polygon = patches.Polygon(
-                polygon_points, alpha=1.0, closed=True, fc="None", ec="tab:brown", zorder=10, linewidth=2
+                polygon_points,
+                alpha=1.0,
+                closed=True,
+                fc="None",
+                ec="tab:brown",
+                zorder=10,
+                linewidth=2,
             )
             ax.add_patch(vehicle_polygon)
 
@@ -346,7 +368,11 @@ class DualityController:
             if self._obstacle_avoidance_policy == "region2region":
                 # update vehicle
                 length, width = self.__geometry_model.get_params()
-                x, y, theta = closedloop_states[index, 0], closedloop_states[index, 1], closedloop_states[index, 3]
+                x, y, theta = (
+                    closedloop_states[index, 0],
+                    closedloop_states[index, 1],
+                    closedloop_states[index, 3],
+                )
                 vehicle_points = np.array(
                     [
                         [
@@ -371,4 +397,3 @@ class DualityController:
 
         anim = animation.FuncAnimation(fig, update, frames=frames, interval=100)
         anim.save("animation/world.gif", dpi=200, writer="imagemagick")
-
