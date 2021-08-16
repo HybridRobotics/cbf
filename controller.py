@@ -1,399 +1,220 @@
-import datetime
-import math
-
-import casadi as ca
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
+from utils import *
 import numpy as np
-import sympy as sp
-from matplotlib import animation
-
-import utils
+import casadi as ca
+import datetime
 
 
-class DubinCarDyn:
-    @staticmethod
-    def forward_dynamics(x, u, timestep):
-        """Return updated state in a form of `np.ndnumpy`"""
-        x_next = np.ndarray(shape=(4,), dtype=float)
-        x_next[0] = x[0] + x[2] * math.cos(x[3]) * timestep
-        x_next[1] = x[1] + x[2] * math.sin(x[3]) * timestep
-        x_next[2] = x[2] + u[0] * timestep
-        x_next[3] = x[3] + u[1] * timestep
-        return x_next
-
-    @staticmethod
-    def forward_dynamics_opt(timestep):
-        """Return updated state in a form of `ca.SX`"""
-        x_symbol = ca.SX.sym("x", 4)
-        u_symbol = ca.SX.sym("u", 2)
-        x_symbol_next = x_symbol[0] + x_symbol[2] * ca.cos(x_symbol[3]) * timestep
-        y_symbol_next = x_symbol[1] + x_symbol[2] * ca.sin(x_symbol[3]) * timestep
-        v_symbol_next = x_symbol[2] + u_symbol[0] * timestep
-        theta_symbol_next = x_symbol[3] + u_symbol[1] * timestep
-        state_symbol_next = ca.vertcat(x_symbol_next, y_symbol_next, v_symbol_next, theta_symbol_next)
-        return ca.Function("dubin_car_dyn", [x_symbol, u_symbol], [state_symbol_next])
-
-    @staticmethod
-    def nominal_safe_controller(x, timestep, amax, amin):
-        """Return updated state using nominal safe controller in a form of `np.ndnumpy`"""
-
-        u_nom = np.zeros(shape=(2,))
-        u_nom[0] = max(min(amax, -x[2] / timestep), amin)
-        return u_nom, DubinCarDyn.forward_dynamics(x, u_nom, timestep)
-
-    @staticmethod
-    def obstacle_filter_radius(x, timestep, amax, dist_margin):
-        """Return radius outside which to ignore obstacles"""
-
-        radius_safe_factor = 1.25
-        min_brake_dist_next = (abs(x[2]) + amax * timestep) ** 2 / (2 * amax) + dist_margin
-        return radius_safe_factor * min_brake_dist_next + abs(x[2]) * timestep + amax * timestep ** 2 / 2
+class NmpcDcbfOptimizerParam:
+    def __init__(self):
+        self.horizon = 4
+        self.mat_Q = np.diag([100.0, 100.0, 1.0, 1.0])
+        self.mat_R = np.diag([0.0, 0.0])
+        self.mat_Rold = np.diag([1.0, 1.0])
+        self.mat_dR = np.diag([1.0, 1.0])
+        self.gamma = 0.9
+        self.pomega = 1.0
+        self.margin_dist = 0.01
 
 
-class DubinCarGeo:
-    def __init__(self, length, width):
-        self.__length = length
-        self.__width = width
-        self.__region = utils.RectangleRegion(-length / 2, length / 2, -width / 2, width / 2)
+class NmpcDbcfOptimizer:
+    def __init__(self, variables: dict, costs: dict, dynamics_opt):
+        self.opti = None
+        self.variables = variables
+        self.costs = costs
+        self.dynamics_opt = dynamics_opt
 
-    def get_params(self):
-        return self.__length, self.__width
+    def set_state(self, state):
+        self.state = state
 
-    def get_convex_rep(self):
-        return self.__region.get_convex_rep()
+    def initialize_variables(self, param):
+        self.variables["x"] = self.opti.variable(4, param.horizon + 1)
+        self.variables["u"] = self.opti.variable(2, param.horizon)
 
+    def add_initial_condition_constraint(self):
+        self.opti.subject_to(self.variables["x"][:, 0] == self.state._x)
 
-class DualityController:
-    def __init__(
-        self,
-        sys_timestep,
-        sim_timestep,
-        ctrl_timestep,
-        vehicle_length,
-        vehicle_width,
-        num_horizon_opt,
-        num_horizon_cbf,
-        gamma,
-        dist_margin,
-    ):
-        # System
-        self._state = None
-        self._input = None
-        self._time = 0.0
-        self.__sys_timestep = sys_timestep
-        self.__sim_timestep = sim_timestep
-        # Planner
-        self._planner = None
-        # System model
-        self.__ctrl_timestep = ctrl_timestep
-        self.__dynamics_model = DubinCarDyn.forward_dynamics_opt(ctrl_timestep)
-        self.__geometry_model = DubinCarGeo(vehicle_length, vehicle_width)
-        # Optimal control with obstacle avoidance
-        self.__num_horizon_opt = num_horizon_opt
-        self.__num_horizon_cbf = num_horizon_cbf
-        self._obstacles = []
-        self._gamma = gamma
-        self._dist_margin = dist_margin
-        # Logging
-        self._state_log = []
-        self._input_log = []
-        self._local_path_log = []
-        self._openloop_state_log = []
-
-    def set_state(self, x):
-        self._state = x
-
-    def set_input(self, u):
-        self._input = u
-
-    def set_planner(self, planner):
-        self._planner = planner
-
-    def add_obstacle(self, obs):
-        self._obstacles.append(obs)
-
-    def set_obstacles(self, obs_list):
-        for obs in obs_list:
-            self.add_obstacle(obs)
-
-    def set_obstacle_avoidance_policy(self, policy):
-        self._obstacle_avoidance_policy = policy
-
-    def dynamics(self):
-        # Logging
-        self._state_log.append(self._state)
-        self._input_log.append(self._input)
-        # Simulate the dynamical system
-        count = 0
-        while self.__sim_timestep * count < self.__sys_timestep:
-            self._state = DubinCarDyn.forward_dynamics(self._state, self._input, self.__sim_timestep)
-            count += 1
-        self._time += self.__sys_timestep
-
-    def sim(self, simulation_time):
-        while self._time < simulation_time:
-            # calculate optimal control input
-            self.calc_input()
-            # simulate the system
-            self.dynamics()
-        self._state_log.append(self._state)
-
-    def get_translation(self):
-        return np.array([[self._state[0]], [self._state[1]]])
-
-    def get_rotation(self):
-        return np.array(
-            [
-                [math.cos(self._state[3]), -math.sin(self._state[3])],
-                [math.sin(self._state[3]), math.cos(self._state[3])],
-            ]
-        )
-
-    def calc_input(self):
-        opti = ca.Opti()
-        # variables and cost
-        x = opti.variable(4, self.__num_horizon_opt + 1)
-        u = opti.variable(2, self.__num_horizon_opt)
-        cost = 0
-        # hyperparameters
-        mat_Q = np.diag([100.0, 100.0, 10.0, 1.0])
-        mat_R = np.diag([0.0, 0.0])
-        mat_Rold = np.diag([1.0, 1.0])
-        mat_dR = np.diag([1.0, 1.0])
-        pomega = 1.0
+    def add_input_constraint(self, param):
+        # TODO: wrap params
         amin, amax = -1.0, 1.0
         omegamin, omegamax = -1.0, 1.0
-        # initial condition
-        opti.subject_to(x[:, 0] == self._state)
-        # get reference trajectory from local planner
-        local_path = self._planner.local_path(self._state[0:2])
-        # input constraints / dynamics constraints / stage cost
-        for i in range(self.__num_horizon_opt):
+        for i in range(param.horizon):
             # input constraints
-            opti.subject_to(u[0, i] <= amax)
-            opti.subject_to(amin <= u[0, i])
-            opti.subject_to(u[1, i] <= omegamax)
-            opti.subject_to(omegamin <= u[1, i])
-            # dynamics constraints
-            opti.subject_to(x[:, i + 1] == self.__dynamics_model(x[:, i], u[:, i]))
-            # state stage cost
-            x_diff = x[:, i] - local_path[i, :]
-            cost += ca.mtimes(x_diff.T, ca.mtimes(mat_Q, x_diff))
-            # input stage cost
-            cost += ca.mtimes(u[:, i].T, ca.mtimes(mat_R, u[:, i]))
-        # input cost
-        cost += ca.mtimes((u[:, 0] - self._input).T, ca.mtimes(mat_Rold, (u[:, 0] - self._input)))
-        for i in range(self.__num_horizon_opt - 1):
-            cost += ca.mtimes((u[:, i + 1] - u[:, i]).T, ca.mtimes(mat_dR, (u[:, i + 1] - u[:, i])))
-        # obstacle avoidance
-        if self._obstacles != None:
-            obs_filter_radius = DubinCarDyn.obstacle_filter_radius(
-                self._state, self.__ctrl_timestep, amax, self._dist_margin
+            self.opti.subject_to(self.variables["u"][0, i] <= amax)
+            self.opti.subject_to(amin <= self.variables["u"][0, i])
+            self.opti.subject_to(self.variables["u"][1, i] <= omegamax)
+            self.opti.subject_to(omegamin <= self.variables["u"][1, i])
+
+    def add_dynamics_constraint(self, param):
+        for i in range(param.horizon):
+            self.opti.subject_to(
+                self.variables["x"][:, i + 1] == self.dynamics_opt(self.variables["x"][:, i], self.variables["u"][:, i])
             )
-            for obs in self._obstacles:
-                # get current value of cbf
-                mat_A, vec_b = obs.get_convex_rep()
-                if self._obstacle_avoidance_policy == "point2region":
-                    # get current value of cbf
-                    mat_A, vec_b = obs.get_convex_rep()
-                    cbf_curr, lamb_curr = utils.get_dist_point_to_region(self._state[0:2], mat_A, vec_b)
-                    # check if obstacle is outside filter radius
-                    if cbf_curr > obs_filter_radius:
-                        continue
-                    # duality-cbf constraints
-                    lamb = opti.variable(mat_A.shape[0], self.__num_horizon_cbf)
-                    omega = opti.variable(self.__num_horizon_cbf, 1)
-                    for i in range(self.__num_horizon_cbf):
-                        opti.subject_to(lamb[:, i] >= 0)
-                        opti.subject_to(
-                            ca.mtimes((ca.mtimes(mat_A, x[0:2, i + 1]) - vec_b).T, lamb[:, i])
-                            >= omega[i] * self._gamma ** (i + 1) * cbf_curr + self._dist_margin
-                        )
-                        temp = ca.mtimes(mat_A.T, lamb[:, i])
-                        opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
-                        opti.subject_to(omega[i] >= 0)
-                        cost += pomega * (omega[i] - 1) ** 2
-                        # warm start
-                        opti.set_initial(lamb[:, i], lamb_curr)
-                        opti.set_initial(omega[i], 0.1)
-                if self._obstacle_avoidance_policy == "region2region":
-                    robot_G, robot_g = self.__geometry_model.get_convex_rep()
-                    # get current value of cbf
-                    cbf_curr, lamb_curr, mu_curr = utils.get_dist_region_to_region(
-                        mat_A,
-                        vec_b,
-                        np.dot(robot_G, self.get_rotation().T),
-                        np.dot(
-                            np.dot(robot_G, self.get_rotation().T),
-                            self.get_translation(),
-                        )
-                        + robot_g,
-                    )
-                    # check if obstacle is outside filter radius
-                    if cbf_curr > obs_filter_radius:
-                        continue
-                    # duality-cbf constraints
-                    lamb = opti.variable(mat_A.shape[0], self.__num_horizon_cbf)
-                    mu = opti.variable(robot_G.shape[0], self.__num_horizon_cbf)
-                    omega = opti.variable(self.__num_horizon_cbf, 1)
-                    for i in range(self.__num_horizon_cbf):
-                        robot_R = ca.hcat(
-                            [
-                                ca.vcat([ca.cos(x[3, i + 1]), ca.sin(x[3, i + 1])]),
-                                ca.vcat([-ca.sin(x[3, i + 1]), ca.cos(x[3, i + 1])]),
-                            ]
-                        )
-                        robot_T = x[0:2, i + 1]
-                        opti.subject_to(lamb[:, i] >= 0)
-                        opti.subject_to(mu[:, i] >= 0)
-                        opti.subject_to(
-                            -ca.mtimes(robot_g.T, mu[:, i])
-                            + ca.mtimes((ca.mtimes(mat_A, robot_T) - vec_b).T, lamb[:, i])
-                            >= omega[i] * self._gamma ** (i + 1) * cbf_curr + self._dist_margin
-                        )
-                        opti.subject_to(
-                            ca.mtimes(robot_G.T, mu[:, i]) + ca.mtimes(ca.mtimes(robot_R.T, mat_A.T), lamb[:, i]) == 0
-                        )
-                        temp = ca.mtimes(mat_A.T, lamb[:, i])
-                        opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
-                        opti.subject_to(omega[i] >= 0)
-                        cost += pomega * (omega[i] - 1) ** 2
-                        # warm start
-                        opti.set_initial(lamb[:, i], lamb_curr)
-                        opti.set_initial(mu[:, i], mu_curr)
-                        opti.set_initial(omega[i], 0.1)
-        # warm start
-        state_ws = self._state
-        for i in range(self.__num_horizon_opt):
-            u_ws, state_ws = DubinCarDyn.nominal_safe_controller(state_ws, self.__ctrl_timestep, amax, amin)
-            opti.set_initial(x[:, i + 1], state_ws)
-            opti.set_initial(u[:, i], u_ws)
-        # solve optimization
-        opti.minimize(cost)
+
+    def add_reference_trajectory_tracking_cost(self, param, reference_trajectory):
+        self.costs["reference_trajectory_tracking"] = 0
+        for i in range(param.horizon):
+            x_diff = self.variables["x"][:, i] - reference_trajectory[i, :]
+            self.costs["reference_trajectory_tracking"] += ca.mtimes(x_diff.T, ca.mtimes(param.mat_Q, x_diff))
+
+    def add_input_stage_cost(self, param):
+        self.costs["input_stage"] = 0
+        for i in range(param.horizon):
+            self.costs["input_stage"] += ca.mtimes(
+                self.variables["u"][:, i].T, ca.mtimes(param.mat_R, self.variables["u"][:, i])
+            )
+
+    def add_prev_input_cost(self, param):
+        self.costs["prev_input"] = 0
+        self.costs["prev_input"] += ca.mtimes(
+            (self.variables["u"][:, 0] - self.state._u).T,
+            ca.mtimes(param.mat_Rold, (self.variables["u"][:, 0] - self.state._u)),
+        )
+
+    def add_input_smoothness_cost(self, param):
+        self.costs["input_smoothness"] = 0
+        for i in range(param.horizon - 1):
+            self.costs["input_smoothness"] += ca.mtimes(
+                (self.variables["u"][:, i + 1] - self.variables["u"][:, i]).T,
+                ca.mtimes(param.mat_dR, (self.variables["u"][:, i + 1] - self.variables["u"][:, i])),
+            )
+
+    def add_point_to_convex_constraint(self, param, obs_geo, safe_dist):
+        # get current value of cbf
+        mat_A, vec_b = obs_geo.get_convex_rep()
+        cbf_curr, lamb_curr = get_dist_point_to_region(self.state._x[0:2], mat_A, vec_b)
+        # filter obstacle if it's still far away
+        if cbf_curr > safe_dist:
+            return
+        # duality-cbf constraints
+        lamb = self.opti.variable(mat_A.shape[0], param.horizon)
+        omega = self.opti.variable(param.horizon, 1)
+        for i in range(param.horizon):
+            self.opti.subject_to(lamb[:, i] >= 0)
+            self.opti.subject_to(
+                ca.mtimes((ca.mtimes(mat_A, self.variables["x"][0:2, i + 1]) - vec_b).T, lamb[:, i])
+                >= omega[i] * param.gamma ** (i + 1) * cbf_curr + param.margin_dist
+            )
+            temp = ca.mtimes(mat_A.T, lamb[:, i])
+            self.opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
+            self.opti.subject_to(omega[i] >= 0)
+            self.costs["decay_rate_relaxing"] += param.pomega * (omega[i] - 1) ** 2
+            # warm start
+            self.opti.set_initial(lamb[:, i], lamb_curr)
+            self.opti.set_initial(omega[i], 0.1)
+
+    def add_convex_to_convex_constraint(self, param, robot_geo, obs_geo, safe_dist):
+        mat_A, vec_b = obs_geo.get_convex_rep()
+        robot_G, robot_g = robot_geo.convex_rep()
+        # get current value of cbf
+        cbf_curr, lamb_curr, mu_curr = get_dist_region_to_region(
+            mat_A,
+            vec_b,
+            np.dot(robot_G, self.state.rotation().T),
+            np.dot(np.dot(robot_G, self.state.rotation().T), self.state.translation()) + robot_g,
+        )
+        # filter obstacle if it's still far away
+        if cbf_curr > safe_dist:
+            return
+        # duality-cbf constraints
+        lamb = self.opti.variable(mat_A.shape[0], param.horizon)
+        mu = self.opti.variable(robot_G.shape[0], param.horizon)
+        omega = self.opti.variable(param.horizon, 1)
+        for i in range(param.horizon):
+            robot_R = ca.hcat(
+                [
+                    ca.vcat(
+                        [
+                            ca.cos(self.variables["x"][3, i + 1]),
+                            ca.sin(self.variables["x"][3, i + 1]),
+                        ]
+                    ),
+                    ca.vcat(
+                        [
+                            -ca.sin(self.variables["x"][3, i + 1]),
+                            ca.cos(self.variables["x"][3, i + 1]),
+                        ]
+                    ),
+                ]
+            )
+            robot_T = self.variables["x"][0:2, i + 1]
+            self.opti.subject_to(lamb[:, i] >= 0)
+            self.opti.subject_to(mu[:, i] >= 0)
+            self.opti.subject_to(
+                -ca.mtimes(robot_g.T, mu[:, i]) + ca.mtimes((ca.mtimes(mat_A, robot_T) - vec_b).T, lamb[:, i])
+                >= omega[i] * param.gamma ** (i + 1) * cbf_curr + param.margin_dist
+            )
+            self.opti.subject_to(
+                ca.mtimes(robot_G.T, mu[:, i]) + ca.mtimes(ca.mtimes(robot_R.T, mat_A.T), lamb[:, i]) == 0
+            )
+            temp = ca.mtimes(mat_A.T, lamb[:, i])
+            self.opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
+            self.opti.subject_to(omega[i] >= 0)
+            self.costs["decay_rate_relaxing"] += param.pomega * (omega[i] - 1) ** 2
+            # warm start
+            self.opti.set_initial(lamb[:, i], lamb_curr)
+            self.opti.set_initial(mu[:, i], mu_curr)
+            self.opti.set_initial(omega[i], 0.1)
+
+    def add_obstacle_avoidance_constraint(self, param, system, obstacles_geo):
+        self.costs["decay_rate_relaxing"] = 0
+        # TODO: wrap params
+        # TODO: move safe dist inside attribute `system`
+        safe_dist = system._dynamics.safe_dist(system._state._x, 0.1, -1.0, 1.0, param.margin_dist)
+        for obs_geo in obstacles_geo:
+            # TODO: need to add case for `add_point_convex_constraint()`
+            if isinstance(system._geometry.rep(), RectangleRegion):
+                self.add_convex_to_convex_constraint(param, system._geometry, obs_geo, safe_dist)
+                # self.add_point_to_convex_constraint(param, obs_geo, safe_dist
+            else:
+                raise NotImplementedError()
+
+    def add_warm_start(self, param, system):
+        # TODO: wrap params
+        x_ws, u_ws = system._dynamics.nominal_safe_controller(self.state._x, 0.1, -1.0, 1.0)
+        for i in range(param.horizon):
+            self.opti.set_initial(self.variables["x"][:, i + 1], x_ws)
+            self.opti.set_initial(self.variables["u"][:, i], u_ws)
+
+    def setup(self, param, system, reference_trajectory, obstacles):
+        self.set_state(system._state)
+        self.opti = ca.Opti()
+        self.initialize_variables(param)
+        self.add_initial_condition_constraint()
+        self.add_input_constraint(param)
+        self.add_dynamics_constraint(param)
+        self.add_reference_trajectory_tracking_cost(param, reference_trajectory)
+        self.add_input_stage_cost(param)
+        self.add_prev_input_cost(param)
+        self.add_input_smoothness_cost(param)
+        self.add_obstacle_avoidance_constraint(param, system, obstacles)
+        self.add_warm_start(param, system)
+
+    def solve_nlp(self):
+        cost = 0
+        for cost_name in self.costs:
+            cost += self.costs[cost_name]
+        self.opti.minimize(cost)
         option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
-        opti.solver("ipopt", option)
         start_timer = datetime.datetime.now()
-        opt_sol = opti.solve()
+        self.opti.solver("ipopt", option)
+        opt_sol = self.opti.solve()
         end_timer = datetime.datetime.now()
         delta_timer = end_timer - start_timer
         print("solver time: ", delta_timer.total_seconds())
-        self._input = opt_sol.value(u[:, 0])
-        # Logging
-        self._local_path_log.append(local_path)
-        self._openloop_state_log.append(opt_sol.value(x).T)
+        return opt_sol
 
-    def plot_world(self):
-        print("Generate plotting")
-        fig, ax = plt.subplots()
-        plt.axis("equal")
-        # plot robot's global path
-        global_path = self._planner.global_path()
-        ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
-        # plot robot's closed-loop trajectory
-        closedloop_states = np.vstack(self._state_log)
-        ax.plot(
-            closedloop_states[:, 0],
-            closedloop_states[:, 1],
-            "k-",
-            linewidth=2,
-            markersize=4,
-        )
-        # plot obstacles
-        if self._obstacles != None:
-            for obs in self._obstacles:
-                rec_patch = obs.get_plot_patch()
-                ax.add_patch(rec_patch)
-        plt.savefig("figures/world.eps", format="eps", dpi=1000, pad_inches=0)
 
-    def plot_states(self):
-        fig, ax = plt.subplots()
-        tspan = np.linspace(0, self._time, round(self._time / self.__sys_timestep) + 1)
-        # plot robot's closed-loop states
-        states = np.vstack(self._state_log)
-        ax.plot(tspan, states[:, 2])
-        plt.savefig("figures/states-profile.eps", format="eps", dpi=1000, pad_inches=0)
+class NmpcDcbfController:
+    # TODO: Refactor this class to inheritate from a general optimizer
+    def __init__(self, dynamics=None):
+        self._param = NmpcDcbfOptimizerParam()
+        self._optimizer = NmpcDbcfOptimizer({}, {}, dynamics.forward_dynamics_opt(0.1))
 
-    def animate_world(self):
-        print("Generate animation")
-        fig, ax = plt.subplots()
-        plt.axis("equal")
-        # plot robot's global path
-        global_path = self._planner.global_path()
-        ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
-        # plot robot's closed-loop trajectory
-        closedloop_states = np.vstack(self._state_log)
-        ax.plot(
-            closedloop_states[:, 0],
-            closedloop_states[:, 1],
-            "k-",
-            linewidth=2,
-            markersize=4,
-        )
-        # plot obstacles
-        if self._obstacles != None:
-            for obs in self._obstacles:
-                rec_patch = obs.get_plot_patch()
-                ax.add_patch(rec_patch)
-        tpsan = np.linspace(0, self._time, round(self._time / self.__sys_timestep) + 1)
-        ### Initialize data for animation
-        frames = len(self._local_path_log)
-        # initialize local reference trajectory
-        local_path = self._local_path_log[0]
-        (line_localpath,) = ax.plot(local_path[:, 0], local_path[:, 1])
-        # initialize open-loop trajectory
-        openloop_state = self._openloop_state_log[0]
-        (line_openloop_state,) = ax.plot(openloop_state[:, 0], openloop_state[:, 1])
-        if self._obstacle_avoidance_policy == "region2region":
-            # initialize vehicle
-            polygon_points = np.array([[1.0, 1.0], [1.0, -1.0], [-1.0, -1.0], [-1.0, 1.0]])
-            vehicle_polygon = patches.Polygon(
-                polygon_points,
-                alpha=1.0,
-                closed=True,
-                fc="None",
-                ec="tab:brown",
-                zorder=10,
-                linewidth=2,
-            )
-            ax.add_patch(vehicle_polygon)
+    def generate_control_input(self, system, global_path, local_trajectory, obstacles):
+        self._optimizer.setup(self._param, system, local_trajectory, obstacles)
+        self._opt_sol = self._optimizer.solve_nlp()
+        return self._opt_sol.value(self._optimizer.variables["u"][:, 0])
 
-        def update(index):
-            # update local reference trajectory
-            localpath = self._local_path_log[index]
-            line_localpath.set_data(localpath[:, 0], localpath[:, 1])
-            # update open-loop trajectory
-            openloop_state = self._openloop_state_log[index]
-            line_openloop_state.set_data(openloop_state[:, 0], openloop_state[:, 1])
-            if self._obstacle_avoidance_policy == "region2region":
-                # update vehicle
-                length, width = self.__geometry_model.get_params()
-                x, y, theta = (
-                    closedloop_states[index, 0],
-                    closedloop_states[index, 1],
-                    closedloop_states[index, 3],
-                )
-                vehicle_points = np.array(
-                    [
-                        [
-                            x + length / 2 * np.cos(theta) - width / 2 * np.sin(theta),
-                            y + length / 2 * np.sin(theta) + width / 2 * np.cos(theta),
-                        ],
-                        [
-                            x + length / 2 * np.cos(theta) + width / 2 * np.sin(theta),
-                            y + length / 2 * np.sin(theta) - width / 2 * np.cos(theta),
-                        ],
-                        [
-                            x - length / 2 * np.cos(theta) + width / 2 * np.sin(theta),
-                            y - length / 2 * np.sin(theta) - width / 2 * np.cos(theta),
-                        ],
-                        [
-                            x - length / 2 * np.cos(theta) - width / 2 * np.sin(theta),
-                            y - length / 2 * np.sin(theta) + width / 2 * np.cos(theta),
-                        ],
-                    ]
-                )
-                vehicle_polygon.set_xy(vehicle_points)
-
-        anim = animation.FuncAnimation(fig, update, frames=frames, interval=100)
-        anim.save("animation/world.gif", dpi=200, writer="imagemagick")
+    def logging(self, logger):
+        logger._xtrajs.append(self._opt_sol.value(self._optimizer.variables["x"]).T)
+        logger._utrajs.append(self._opt_sol.value(self._optimizer.variables["u"]).T)
