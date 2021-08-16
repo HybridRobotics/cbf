@@ -1,31 +1,42 @@
-import math
-
 import numpy as np
-import sympy as sp
-from scipy.interpolate import interp1d
 
 
-class Planner:
-    def __init__(self, globalpath, reference_speed, num_horizon, localpath_timestep):
-        # global path
-        self._global_path = globalpath
-        self._global_path_index = 0
-        self._num_waypoint = np.shape(globalpath)[0]
-        # local path
-        self._reference_speed = reference_speed
-        self._num_horizon = num_horizon
-        self._local_path_timestep = localpath_timestep
+class GlobalPlanner:
+    # TODO: this class shall be renamed as replace by a search-based planner
+    def __init__(self):
+        self._global_path = None
 
-    def global_path(self):
-        """Return global path"""
+    def generate_path(self):
+        # TODO: Remove hardcoded global path
+        self._global_path = np.array([[0.0, 0.2], [0.5, 0.2], [0.5, 0.8], [1.0, 0.8]])
         return self._global_path
 
-    def local_path(self, pos):
-        """[Generate smooth trajectory with sampling waypoints to track]"""
-        proj_dist_buffer = 0.05
+    def logging(self, logger):
+        logger.append(self._global_path)
 
+
+class PurePursuitPlanner:
+    # TODO: Refactor this class to make it light-weight.
+    # TODO: Create base class for this local planner
+    def __init__(self):
+        # TODO: wrap params
+        self._global_path_index = 0
+        # TODO: number of waypoints shall equal to length of global path
+        self._num_waypoint = 4
+        # local path
+        self._reference_speed = 0.2
+        self._num_horizon = 4
+        self._local_path_timestep = 0.1
+        self._local_trajectory = None
+
+    def generate_trajectory(self, system, global_path):
+        pos = system._state._x[0:2]
+        return self.generate_trajectory_internal(pos, global_path)
+
+    def generate_trajectory_internal(self, pos, global_path):
+        proj_dist_buffer = 0.05
         local_index = self._global_path_index
-        trunc_path = np.vstack([self._global_path[local_index:, :], self._global_path[-1, :]])
+        trunc_path = np.vstack([global_path[local_index:, :], global_path[-1, :]])
         curv_vec = trunc_path[1:, :] - trunc_path[:-1, :]
         curv_length = np.linalg.norm(curv_vec, axis=1)
 
@@ -37,7 +48,7 @@ class Planner:
 
         if proj_dist >= curv_length[0] - proj_dist_buffer and local_index < self._num_waypoint - 1:
             self._global_path_index += 1
-            return self.local_path(pos)
+            return self.generate_trajectory_internal(pos, global_path)
 
         # t_c = (proj_dist + proj_dist_buffer) / self._reference_speed
         t_c = proj_dist / self._reference_speed
@@ -57,4 +68,8 @@ class Planner:
         ).T
         path_vel = self._reference_speed * np.ones((self._num_horizon, 1))
         path_head = np.arctan2(curv_vec[path_idx, 1], curv_vec[path_idx, 0]).reshape(self._num_horizon, 1)
-        return np.hstack([path, path_vel, path_head])
+        self._local_trajectory = np.hstack([path, path_vel, path_head])
+        return self._local_trajectory
+
+    def logging(self, logger):
+        logger.append(self._local_trajectory)
