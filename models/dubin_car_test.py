@@ -1,7 +1,9 @@
-from dubin_car import *
-from planner import *
-from controller import *
-from utils import *
+from sim.simulation import SingleAgentSimulation
+from planning.path_generator.astar_generator import AstarPathGenerator
+from planning.trajectory_generator.constant_speed_generator import ConstantSpeedTrajectoryGenerator
+from control.dcbf_controller import NmpcDcbfController
+from models.dubin_car import *
+from models.geometry_utils import *
 
 
 def dubin_car_system_test():
@@ -20,9 +22,9 @@ def dubin_car_planner_test():
         geometry=DubinCarGeometry(0.08, 0.14),
         dynamics=DubinCarDynamics(),
     )
-    global_planner = GlobalPlanner()
+    global_planner = AstarPathGenerator()
     global_path = global_planner.generate_path()
-    local_planner = PurePursuitPlanner()
+    local_planner = ConstantSpeedTrajectoryGenerator()
     local_trajectory = local_planner.generate_trajectory(sys, global_path)
     print(local_trajectory)
 
@@ -33,9 +35,9 @@ def dubin_car_controller_test():
         geometry=DubinCarGeometry(0.08, 0.14),
         dynamics=DubinCarDynamics(),
     )
-    global_planner = GlobalPlanner()
+    global_planner = AstarPathGenerator()
     global_path = global_planner.generate_path()
-    local_planner = PurePursuitPlanner()
+    local_planner = ConstantSpeedTrajectoryGenerator()
     local_trajectory = local_planner.generate_trajectory(sys, global_path)
     obstacles = []
     obstacles.append(RectangleRegion(0.0, 1.0, 0.90, 1.0))
@@ -53,8 +55,8 @@ def dubin_car_simulation_test():
             dynamics=DubinCarDynamics(),
         )
     )
-    robot.set_global_planner(GlobalPlanner())
-    robot.set_local_planner(PurePursuitPlanner())
+    robot.set_global_planner(AstarPathGenerator())
+    robot.set_local_planner(ConstantSpeedTrajectoryGenerator())
     robot.set_controller(NmpcDcbfController(dynamics=DubinCarDynamics()))
     obstacles = []
     obstacles.append(RectangleRegion(0.0, 1.0, 0.90, 1.0))
