@@ -1,5 +1,5 @@
-from simulation import *
-from utils import *
+from sim.simulation import *
+from models.geometry_utils import *
 import datetime
 
 

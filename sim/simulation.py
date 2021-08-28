@@ -1,11 +1,11 @@
-from utils import RectangleRegion
-from logger import SystemLogger, ControllerLogger
 import math
 import casadi as ca
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib import animation
+from models.geometry_utils import RectangleRegion
+from sim.logger import SystemLogger, ControllerLogger
 
 
 class System:
