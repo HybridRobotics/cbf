@@ -12,4 +12,4 @@ class AstarPathGenerator:
         return self._global_path
 
     def logging(self, logger):
-        logger.append(self._global_path)
+        logger._paths.append(self._global_path)
