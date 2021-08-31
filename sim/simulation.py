@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib import animation
 from models.geometry_utils import RectangleRegion
-from sim.logger import SystemLogger, ControllerLogger
+from sim.logger import SystemLogger, ControllerLogger, LocalPlannerLogger, GlobalPlannerLogger
 
 
 class System:
@@ -23,11 +23,11 @@ class Robot:
 
     def set_global_planner(self, global_planner):
         self._global_planner = global_planner
-        self._global_planner_logger = []
+        self._global_planner_logger = GlobalPlannerLogger()
 
     def set_local_planner(self, local_planner):
         self._local_planner = local_planner
-        self._local_planner_logger = []
+        self._local_planner_logger = LocalPlannerLogger()
 
     def set_controller(self, controller):
         self._controller = controller
@@ -70,7 +70,7 @@ class SingleAgentSimulation:
         # TODO: make this plotting function general applicable to different systems
         fig, ax = plt.subplots()
         plt.axis("equal")
-        global_paths = self._robot._global_planner_logger
+        global_paths = self._robot._global_planner_logger._paths
         global_path = global_paths[0]
         ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
         closedloop_traj = np.vstack(self._robot._system_logger._xs)
@@ -85,16 +85,16 @@ class SingleAgentSimulation:
         # TODO: make this plotting function general applicable to different systems
         fig, ax = plt.subplots()
         plt.axis("equal")
-        global_paths = self._robot._global_planner_logger
+        global_paths = self._robot._global_planner_logger._paths
         global_path = global_paths[0]
         ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
 
-        local_paths = self._robot._local_planner_logger
+        local_paths = self._robot._local_planner_logger._trajs
         local_path = local_paths[0]
-        (reference_traj_line,) = ax.plot(local_path[:, 0], local_path[:, 0])
+        (reference_traj_line,) = ax.plot(local_path[:, 0], local_path[:, 1])
 
-        controller_logger = self._robot._controller_logger
-        optimized_traj = controller_logger._xtrajs[0]
+        optimized_trajs = self._robot._controller_logger._xtrajs
+        optimized_traj = optimized_trajs[0]
         (optimized_traj_line,) = ax.plot(optimized_traj[:, 0], optimized_traj[:, 1])
 
         closedloop_traj = np.vstack(self._robot._system_logger._xs)
@@ -110,7 +110,7 @@ class SingleAgentSimulation:
         def update(index):
             local_path = local_paths[index]
             reference_traj_line.set_data(local_path[:, 0], local_path[:, 1])
-            optimized_traj = controller_logger._xtrajs[index]
+            optimized_traj = optimized_trajs[index]
             optimized_traj_line.set_data(optimized_traj[:, 0], optimized_traj[:, 1])
             # TODO: wrap this updated function
             length, width = self._robot._system._geometry._length, self._robot._system._geometry._width

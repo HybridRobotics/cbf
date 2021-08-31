@@ -58,4 +58,4 @@ class ConstantSpeedTrajectoryGenerator:
         return self._local_trajectory
 
     def logging(self, logger):
-        logger.append(self._local_trajectory)
+        logger._trajs.append(self._local_trajectory)
