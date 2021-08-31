@@ -76,8 +76,8 @@ class SingleAgentSimulation:
         closedloop_traj = np.vstack(self._robot._system_logger._xs)
         ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=2, markersize=4)
         for obs in self._obstacles:
-            rec_patch = obs.get_plot_patch()
-            ax.add_patch(rec_patch)
+            obs_patch = obs.get_plot_patch()
+            ax.add_patch(obs_patch)
         plt.savefig("figures/world.eps", format="eps", dpi=1000, pad_inches=0)
         plt.savefig("figures/world.png", format="png", dpi=1000, pad_inches=0)
 
@@ -100,46 +100,19 @@ class SingleAgentSimulation:
         closedloop_traj = np.vstack(self._robot._system_logger._xs)
         ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=2, markersize=4)
         for obs in self._obstacles:
-            rec_patch = obs.get_plot_patch()
-            ax.add_patch(rec_patch)
+            obs_patch = obs.get_plot_patch()
+            ax.add_patch(obs_patch)
 
-        polygon_points = np.array([[1.0, 1.0], [1.0, -1.0], [-1.0, -1.0], [-1.0, 1.0]])
-        vehicle_polygon = patches.Polygon(polygon_points, alpha=1.0, closed=True, fc="None", ec="tab:brown")
-        ax.add_patch(vehicle_polygon)
+        robot_patch = patches.Polygon(np.zeros((1, 2)), alpha=1.0, closed=True, fc="None", ec="tab:brown")
+        ax.add_patch(robot_patch)
 
         def update(index):
             local_path = local_paths[index]
             reference_traj_line.set_data(local_path[:, 0], local_path[:, 1])
             optimized_traj = optimized_trajs[index]
             optimized_traj_line.set_data(optimized_traj[:, 0], optimized_traj[:, 1])
-            # TODO: wrap this updated function
-            length, width = self._robot._system._geometry._length, self._robot._system._geometry._width
-            x, y, theta = (
-                closedloop_traj[index, 0],
-                closedloop_traj[index, 1],
-                closedloop_traj[index, 3],
-            )
-            vehicle_points = np.array(
-                [
-                    [
-                        x + length / 2 * np.cos(theta) - width / 2 * np.sin(theta),
-                        y + length / 2 * np.sin(theta) + width / 2 * np.cos(theta),
-                    ],
-                    [
-                        x + length / 2 * np.cos(theta) + width / 2 * np.sin(theta),
-                        y + length / 2 * np.sin(theta) - width / 2 * np.cos(theta),
-                    ],
-                    [
-                        x - length / 2 * np.cos(theta) + width / 2 * np.sin(theta),
-                        y - length / 2 * np.sin(theta) - width / 2 * np.cos(theta),
-                    ],
-                    [
-                        x - length / 2 * np.cos(theta) - width / 2 * np.sin(theta),
-                        y - length / 2 * np.sin(theta) + width / 2 * np.cos(theta),
-                    ],
-                ]
-            )
-            vehicle_polygon.set_xy(vehicle_points)
+            polygon_patch_next = self._robot._system._geometry.get_plot_patch(closedloop_traj[index, :])
+            robot_patch.set_xy(polygon_patch_next.get_xy())
 
         anim = animation.FuncAnimation(fig, update, frames=len(closedloop_traj), interval=100)
-        anim.save("animation/world.gif", dpi=200, writer="imagemagick")
+        anim.save("animation/world.gif", dpi=200, writer=animation.writers["ffmpeg"](fps=10))

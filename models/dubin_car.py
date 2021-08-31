@@ -1,6 +1,7 @@
+import datetime
+import matplotlib.patches as patches
 from sim.simulation import *
 from models.geometry_utils import *
-import datetime
 
 
 class DubinCarDynamics:
@@ -53,6 +54,31 @@ class DubinCarGeometry:
 
     def convex_rep(self):
         return self._region.get_convex_rep()
+
+    def get_plot_patch(self, state):
+        length, width = self._length, self._width
+        x, y, theta = state[0], state[1], state[3]
+        vertices = np.array(
+            [
+                [
+                    x + length / 2 * np.cos(theta) - width / 2 * np.sin(theta),
+                    y + length / 2 * np.sin(theta) + width / 2 * np.cos(theta),
+                ],
+                [
+                    x + length / 2 * np.cos(theta) + width / 2 * np.sin(theta),
+                    y + length / 2 * np.sin(theta) - width / 2 * np.cos(theta),
+                ],
+                [
+                    x - length / 2 * np.cos(theta) + width / 2 * np.sin(theta),
+                    y - length / 2 * np.sin(theta) - width / 2 * np.cos(theta),
+                ],
+                [
+                    x - length / 2 * np.cos(theta) - width / 2 * np.sin(theta),
+                    y - length / 2 * np.sin(theta) + width / 2 * np.cos(theta),
+                ],
+            ]
+        )
+        return patches.Polygon(vertices, alpha=1.0, closed=True, fc="None", ec="tab:brown")
 
 
 class DubinCarStates:

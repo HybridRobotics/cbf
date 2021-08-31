@@ -63,7 +63,7 @@ def dubin_car_simulation_test():
     obstacles.append(RectangleRegion(0.0, 0.4, 0.4, 1.0))
     obstacles.append(RectangleRegion(0.6, 1.0, 0.0, 0.7))
     sim = SingleAgentSimulation(robot, obstacles)
-    sim.run_navigation(10.0)
+    sim.run_navigation(20.0)
     sim.plot_world()
     sim.animate_world()
 
