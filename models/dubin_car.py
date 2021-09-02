@@ -49,11 +49,8 @@ class DubinCarGeometry:
         self._width = width
         self._region = RectangleRegion(-length / 2, length / 2, -width / 2, width / 2)
 
-    def rep(self):
-        return self._region
-
-    def convex_rep(self):
-        return self._region.get_convex_rep()
+    def equiv_rep(self):
+        return [self._region]
 
     def get_plot_patch(self, state):
         length, width = self._length, self._width

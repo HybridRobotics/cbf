@@ -114,5 +114,5 @@ class SingleAgentSimulation:
             polygon_patch_next = self._robot._system._geometry.get_plot_patch(closedloop_traj[index, :])
             robot_patch.set_xy(polygon_patch_next.get_xy())
 
-        anim = animation.FuncAnimation(fig, update, frames=len(closedloop_traj), interval=100)
-        anim.save("animation/world.gif", dpi=200, writer=animation.writers["ffmpeg"](fps=10))
+        anim = animation.FuncAnimation(fig, update, frames=len(closedloop_traj), interval=1000 * 0.1)
+        anim.save("animation/world.mp4", dpi=300, writer=animation.writers["ffmpeg"](fps=60))
