@@ -105,7 +105,7 @@ class NmpcDbcfOptimizer:
 
     def add_convex_to_convex_constraint(self, param, robot_geo, obs_geo, safe_dist):
         mat_A, vec_b = obs_geo.get_convex_rep()
-        robot_G, robot_g = robot_geo.convex_rep()
+        robot_G, robot_g = robot_geo.get_convex_rep()
         # get current value of cbf
         cbf_curr, lamb_curr, mu_curr = get_dist_region_to_region(
             mat_A,
@@ -161,13 +161,14 @@ class NmpcDbcfOptimizer:
         # TODO: wrap params
         # TODO: move safe dist inside attribute `system`
         safe_dist = system._dynamics.safe_dist(system._state._x, 0.1, -1.0, 1.0, param.margin_dist)
+        robot_components = system._geometry.equiv_rep()
         for obs_geo in obstacles_geo:
-            # TODO: need to add case for `add_point_convex_constraint()`
-            if isinstance(system._geometry.rep(), RectangleRegion):
-                self.add_convex_to_convex_constraint(param, system._geometry, obs_geo, safe_dist)
-                # self.add_point_to_convex_constraint(param, obs_geo, safe_dist
-            else:
-                raise NotImplementedError()
+            for robot_comp in robot_components:
+                # TODO: need to add case for `add_point_convex_constraint()`
+                if isinstance(robot_comp, RectangleRegion):
+                    self.add_convex_to_convex_constraint(param, robot_comp, obs_geo, safe_dist)
+                else:
+                    raise NotImplementedError()
 
     def add_warm_start(self, param, system):
         # TODO: wrap params
