@@ -1,4 +1,4 @@
-from control.dcbf_optimizer import NmpcDcbfOptimizerParam, NmpcDbcfOptimizer
+from control.dcbf_optimizer import NmpcDbcfOptimizer, NmpcDcbfOptimizerParam
 
 
 class NmpcDcbfController:

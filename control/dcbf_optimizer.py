@@ -1,6 +1,7 @@
-import numpy as np
-import casadi as ca
 import datetime
+
+import casadi as ca
+import numpy as np
 
 from models.geometry_utils import *
 
@@ -10,8 +11,8 @@ class NmpcDcbfOptimizerParam:
         self.horizon = 4
         self.mat_Q = np.diag([100.0, 100.0, 1.0, 1.0])
         self.mat_R = np.diag([0.0, 0.0])
-        self.mat_Rold = np.diag([1.0, 1.0])
-        self.mat_dR = np.diag([1.0, 1.0])
+        self.mat_Rold = np.diag([1.0, 1.0]) * 0.0
+        self.mat_dR = np.diag([1.0, 1.0]) * 0.0
         self.gamma = 0.9
         self.pomega = 1.0
         self.margin_dist = 0.01
