@@ -1,11 +1,18 @@
 import math
+
 import casadi as ca
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib import animation
+
 from models.geometry_utils import RectangleRegion
-from sim.logger import SystemLogger, ControllerLogger, LocalPlannerLogger, GlobalPlannerLogger
+from sim.logger import (
+    ControllerLogger,
+    GlobalPlannerLogger,
+    LocalPlannerLogger,
+    SystemLogger,
+)
 
 
 class System:
@@ -33,9 +40,9 @@ class Robot:
         self._controller = controller
         self._controller_logger = ControllerLogger()
 
-    def run_global_planner(self):
+    def run_global_planner(self, sys, obstacles, goal_pos):
         # TODO: global path shall be generated with `system` and `obstacles`.
-        self._global_path = self._global_planner.generate_path()
+        self._global_path = self._global_planner.generate_path(sys, obstacles, goal_pos)
         self._global_planner.logging(self._global_planner_logger)
 
     def run_local_planner(self):
@@ -55,12 +62,13 @@ class Robot:
 
 
 class SingleAgentSimulation:
-    def __init__(self, robot, obstacles):
+    def __init__(self, robot, obstacles, goal_position):
         self._robot = robot
         self._obstacles = obstacles
+        self._goal_position = goal_position
 
     def run_navigation(self, navigation_time):
-        self._robot.run_global_planner()
+        self._robot.run_global_planner(self._robot._system, self._obstacles, self._goal_position)
         while self._robot._system._time < navigation_time:
             self._robot.run_local_planner()
             self._robot.run_controller(self._obstacles)

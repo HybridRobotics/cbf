@@ -52,7 +52,8 @@ class PolytopeRegion(ConvexRegion2D):
 
     @classmethod
     def convex_hull(self, points):
-        P = pt.qhull(points)
+        """Convex hull of N points in d dimensions as Nxd numpy array"""
+        P = pt.reduce(pt.qhull(points))
         return PolytopeRegion(P.A, P.b)
 
     def get_convex_rep(self):

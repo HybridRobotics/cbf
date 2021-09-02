@@ -1,7 +1,9 @@
 import datetime
+
 import matplotlib.patches as patches
-from sim.simulation import *
+
 from models.geometry_utils import *
+from sim.simulation import *
 
 
 class DubinCarDynamics:
