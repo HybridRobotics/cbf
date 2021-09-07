@@ -1,13 +1,74 @@
 import math
 
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+from matplotlib import animation
+
 from control.dcbf_controller import NmpcDcbfController
 from models.dubin_car import *
 from models.geometry_utils import *
-from planning.path_generator.search_path_generator import *
+from planning.path_generator.search_path_generator import (
+    AstarLoSPathGenerator,
+    AstarPathGenerator,
+    ThetaStarPathGenerator,
+)
 from planning.trajectory_generator.constant_speed_generator import (
     ConstantSpeedTrajectoryGenerator,
 )
 from sim.simulation import SingleAgentSimulation
+
+
+def plot_world(simulation):
+    # TODO: make this plotting function general applicable to different systems
+    fig, ax = plt.subplots()
+    plt.axis("equal")
+    global_paths = simulation._robot._global_planner_logger._paths
+    global_path = global_paths[0]
+    ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
+    closedloop_traj = np.vstack(simulation._robot._system_logger._xs)
+    ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=2, markersize=4)
+    for obs in simulation._obstacles:
+        obs_patch = obs.get_plot_patch()
+        ax.add_patch(obs_patch)
+    plt.savefig("figures/world.eps", format="eps", dpi=1000, pad_inches=0)
+    plt.savefig("figures/world.png", format="png", dpi=1000, pad_inches=0)
+
+
+def animate_world(simulation):
+    # TODO: make this plotting function general applicable to different systems
+    fig, ax = plt.subplots()
+    plt.axis("equal")
+    global_paths = simulation._robot._global_planner_logger._paths
+    global_path = global_paths[0]
+    ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
+
+    local_paths = simulation._robot._local_planner_logger._trajs
+    local_path = local_paths[0]
+    (reference_traj_line,) = ax.plot(local_path[:, 0], local_path[:, 1])
+
+    optimized_trajs = simulation._robot._controller_logger._xtrajs
+    optimized_traj = optimized_trajs[0]
+    (optimized_traj_line,) = ax.plot(optimized_traj[:, 0], optimized_traj[:, 1])
+
+    closedloop_traj = np.vstack(simulation._robot._system_logger._xs)
+    ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=2, markersize=4)
+    for obs in simulation._obstacles:
+        obs_patch = obs.get_plot_patch()
+        ax.add_patch(obs_patch)
+
+    robot_patch = patches.Polygon(np.zeros((1, 2)), alpha=1.0, closed=True, fc="None", ec="tab:brown")
+    ax.add_patch(robot_patch)
+
+    def update(index):
+        local_path = local_paths[index]
+        reference_traj_line.set_data(local_path[:, 0], local_path[:, 1])
+        optimized_traj = optimized_trajs[index]
+        optimized_traj_line.set_data(optimized_traj[:, 0], optimized_traj[:, 1])
+        polygon_patch_next = simulation._robot._system._geometry.get_plot_patch(closedloop_traj[index, :])
+        robot_patch.set_xy(polygon_patch_next.get_xy())
+
+    anim = animation.FuncAnimation(fig, update, frames=len(closedloop_traj), interval=1000 * 0.1)
+    anim.save("animation/world.mp4", dpi=300, writer=animation.writers["ffmpeg"](fps=60))
 
 
 def dubin_car_system_test():
@@ -69,8 +130,8 @@ def dubin_car_simulation_test():
     robot.set_controller(NmpcDcbfController(dynamics=DubinCarDynamics()))
     sim = SingleAgentSimulation(robot, obstacles, goal_pos)
     sim.run_navigation(40.0)
-    sim.plot_world()
-    sim.animate_world()
+    plot_world(sim)
+    animate_world(sim)
 
 
 def create_env(env_type):
