@@ -9,13 +9,14 @@ from models.geometry_utils import *
 class NmpcDcbfOptimizerParam:
     def __init__(self):
         self.horizon = 4
+        self.horizon_dcbf = 4
         self.mat_Q = np.diag([100.0, 100.0, 1.0, 1.0])
         self.mat_R = np.diag([0.0, 0.0])
         self.mat_Rold = np.diag([1.0, 1.0]) * 0.0
         self.mat_dR = np.diag([1.0, 1.0]) * 0.0
-        self.gamma = 0.9
-        self.pomega = 1.0
-        self.margin_dist = 0.01
+        self.gamma = 0.8
+        self.pomega = 10.0
+        self.margin_dist = 0.00
 
 
 class NmpcDbcfOptimizer:
@@ -37,14 +38,29 @@ class NmpcDbcfOptimizer:
 
     def add_input_constraint(self, param):
         # TODO: wrap params
-        amin, amax = -1.0, 1.0
-        omegamin, omegamax = -1.0, 1.0
+        amin, amax = -0.5, 0.5
+        omegamin, omegamax = -0.5, 0.5
         for i in range(param.horizon):
             # input constraints
             self.opti.subject_to(self.variables["u"][0, i] <= amax)
             self.opti.subject_to(amin <= self.variables["u"][0, i])
             self.opti.subject_to(self.variables["u"][1, i] <= omegamax)
             self.opti.subject_to(omegamin <= self.variables["u"][1, i])
+
+    def add_input_derivative_constraint(self, param):
+        # TODO: Remove this hardcoded function with timestep
+        jerk_min, jerk_max = -1.0, 1.0
+        omegadot_min, omegadot_max = -0.5, 0.5
+        for i in range(param.horizon - 1):
+            # input constraints
+            self.opti.subject_to(self.variables["u"][0, i + 1] - self.variables["u"][0, i] <= jerk_max)
+            self.opti.subject_to(self.variables["u"][0, i + 1] - self.variables["u"][0, i] >= jerk_min)
+            self.opti.subject_to(self.variables["u"][1, i + 1] - self.variables["u"][1, i] <= omegadot_max)
+            self.opti.subject_to(self.variables["u"][1, i + 1] - self.variables["u"][1, i] >= omegadot_min)
+        self.opti.subject_to(self.variables["u"][0, 0] - self.state._u[0] <= jerk_max)
+        self.opti.subject_to(self.variables["u"][0, 0] - self.state._u[0] >= jerk_min)
+        self.opti.subject_to(self.variables["u"][1, 0] - self.state._u[1] <= omegadot_max)
+        self.opti.subject_to(self.variables["u"][1, 0] - self.state._u[1] >= omegadot_min)
 
     def add_dynamics_constraint(self, param):
         for i in range(param.horizon):
@@ -88,9 +104,9 @@ class NmpcDbcfOptimizer:
         if cbf_curr > safe_dist:
             return
         # duality-cbf constraints
-        lamb = self.opti.variable(mat_A.shape[0], param.horizon)
-        omega = self.opti.variable(param.horizon, 1)
-        for i in range(param.horizon):
+        lamb = self.opti.variable(mat_A.shape[0], param.horizon_dcbf)
+        omega = self.opti.variable(param.horizon_dcbf, 1)
+        for i in range(param.horizon_dcbf):
             self.opti.subject_to(lamb[:, i] >= 0)
             self.opti.subject_to(
                 ca.mtimes((ca.mtimes(mat_A, self.variables["x"][0:2, i + 1]) - vec_b).T, lamb[:, i])
@@ -118,10 +134,10 @@ class NmpcDbcfOptimizer:
         if cbf_curr > safe_dist:
             return
         # duality-cbf constraints
-        lamb = self.opti.variable(mat_A.shape[0], param.horizon)
-        mu = self.opti.variable(robot_G.shape[0], param.horizon)
+        lamb = self.opti.variable(mat_A.shape[0], param.horizon_dcbf)
+        mu = self.opti.variable(robot_G.shape[0], param.horizon_dcbf)
         omega = self.opti.variable(param.horizon, 1)
-        for i in range(param.horizon):
+        for i in range(param.horizon_dcbf):
             robot_R = ca.hcat(
                 [
                     ca.vcat(
@@ -166,7 +182,7 @@ class NmpcDbcfOptimizer:
         for obs_geo in obstacles_geo:
             for robot_comp in robot_components:
                 # TODO: need to add case for `add_point_convex_constraint()`
-                if isinstance(robot_comp, RectangleRegion):
+                if isinstance(robot_comp, ConvexRegion2D):
                     self.add_convex_to_convex_constraint(param, robot_comp, obs_geo, safe_dist)
                 else:
                     raise NotImplementedError()
@@ -184,6 +200,7 @@ class NmpcDbcfOptimizer:
         self.initialize_variables(param)
         self.add_initial_condition_constraint()
         self.add_input_constraint(param)
+        # self.add_input_derivative_constraint(param)
         self.add_dynamics_constraint(param)
         self.add_reference_trajectory_tracking_cost(param, reference_trajectory)
         self.add_input_stage_cost(param)

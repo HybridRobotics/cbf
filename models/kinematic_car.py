@@ -65,17 +65,20 @@ class KinematicCarStates:
 
 
 class KinematicCarRectangleGeometry:
-    def __init__(self, length, width):
+    def __init__(self, length, width, rear_dist):
         self._length = length
         self._width = width
-        self._region = RectangleRegion(-length / 2, length / 2, -width / 2, width / 2)
+        self._rear_dist = rear_dist
+        self._region = RectangleRegion(-length + rear_dist, length - rear_dist, -width / 2, width / 2)
 
     def equiv_rep(self):
         return [self._region]
 
     def get_plot_patch(self, state):
-        length, width = self._length, self._width
+        length, width, rear_dist = self._length, self._width, self._rear_dist
         x, y, theta = state[0], state[1], state[3]
+        xc = x + (rear_dist - length / 2) * math.cos(theta)
+        yc = y + (rear_dist - length / 2) * math.sin(theta)
         vertices = np.array(
             [
                 [
@@ -97,6 +100,36 @@ class KinematicCarRectangleGeometry:
             ]
         )
         return patches.Polygon(vertices, alpha=1.0, closed=True, fc="None", ec="tab:brown")
+
+
+class KinematicCarTriangleGeometry:
+    def __init__(self, vertex_points):
+        self._vertex_points = vertex_points
+        self._region = PolytopeRegion.convex_hull(vertex_points)
+
+    def equiv_rep(self):
+        return [self._region]
+
+    def get_plot_patch(self, state):
+        x, y, theta = state[0], state[1], state[3]
+        mat_rotation = np.array([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
+        vertices_points_curr = (mat_rotation @ self._vertex_points.T).T + np.array([x, y])
+        return patches.Polygon(vertices_points_curr, alpha=1.0, closed=True, fc="None", ec="tab:brown")
+
+
+class KinematicCarPentagonGeometry:
+    def __init__(self, vertex_points):
+        self._vertex_points = vertex_points
+        self._region = PolytopeRegion.convex_hull(vertex_points)
+
+    def equiv_rep(self):
+        return [self._region]
+
+    def get_plot_patch(self, state):
+        x, y, theta = state[0], state[1], state[3]
+        mat_rotation = np.array([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
+        vertices_points_curr = (mat_rotation @ self._vertex_points.T).T + np.array([x, y])
+        return patches.Polygon(vertices_points_curr, alpha=1.0, closed=True, fc="None", ec="tab:brown")
 
 
 class KinematicCarSystem(System):
