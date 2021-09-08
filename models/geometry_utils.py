@@ -57,7 +57,8 @@ class PolytopeRegion(ConvexRegion2D):
         return PolytopeRegion(P.A, P.b)
 
     def get_convex_rep(self):
-        return self.mat_A, self.vec_b
+        # TODO: Move this change into constructor instead of API here
+        return self.mat_A, self.vec_b.reshape(self.vec_b.shape[0], -1)
 
     def get_plot_patch(self):
         return patches.Polygon(self.points, closed=True, linewidth=1, edgecolor="r", facecolor="r")
