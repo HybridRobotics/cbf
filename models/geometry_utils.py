@@ -37,7 +37,7 @@ class RectangleRegion(ConvexRegion2D):
             self.right - self.left,
             self.up - self.down,
             linewidth=1,
-            edgecolor="r",
+            edgecolor="k",
             facecolor="r",
         )
 
@@ -61,7 +61,7 @@ class PolytopeRegion(ConvexRegion2D):
         return self.mat_A, self.vec_b.reshape(self.vec_b.shape[0], -1)
 
     def get_plot_patch(self):
-        return patches.Polygon(self.points, closed=True, linewidth=1, edgecolor="r", facecolor="r")
+        return patches.Polygon(self.points, closed=True, linewidth=1, edgecolor="k", facecolor="r")
 
 
 def get_dist_point_to_region(point, mat_A, vec_b):

@@ -6,10 +6,14 @@ import numpy as np
 from models.geometry_utils import *
 
 
+MAZE = 0
+ROBOT = "RANDOM"
+
+
 class NmpcDcbfOptimizerParam:
     def __init__(self):
-        self.horizon = 4
-        self.horizon_dcbf = 4
+        self.horizon = 11
+        self.horizon_dcbf = 6
         self.mat_Q = np.diag([100.0, 100.0, 1.0, 1.0])
         self.mat_R = np.diag([0.0, 0.0])
         self.mat_Rold = np.diag([1.0, 1.0]) * 0.0
@@ -17,6 +21,15 @@ class NmpcDcbfOptimizerParam:
         self.gamma = 0.8
         self.pomega = 10.0
         self.margin_dist = 0.00
+        if ROBOT == "RECT" or ROBOT == "L_SHAPE":
+            self.terminal_weight = 10.0
+        elif ROBOT == "PENT":
+            if MAZE == 1:
+                self.terminal_weight = 2.0
+            elif MAZE == 2:
+                self.terminal_weight = 5.0
+        elif ROBOT == "TRI":
+            self.terminal_weight = 2.0
 
 
 class NmpcDbcfOptimizer:
@@ -70,9 +83,11 @@ class NmpcDbcfOptimizer:
 
     def add_reference_trajectory_tracking_cost(self, param, reference_trajectory):
         self.costs["reference_trajectory_tracking"] = 0
-        for i in range(param.horizon):
+        for i in range(param.horizon-1):
             x_diff = self.variables["x"][:, i] - reference_trajectory[i, :]
             self.costs["reference_trajectory_tracking"] += ca.mtimes(x_diff.T, ca.mtimes(param.mat_Q, x_diff))
+        x_diff = self.variables["x"][:, -1] - reference_trajectory[-1, :]
+        self.costs["reference_trajectory_tracking"] += param.terminal_weight*ca.mtimes(x_diff.T, ca.mtimes(param.mat_Q, x_diff))
 
     def add_input_stage_cost(self, param):
         self.costs["input_stage"] = 0
