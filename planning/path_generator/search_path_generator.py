@@ -11,6 +11,8 @@ def plot_global_map(path, obstacles):
         patch = o.get_plot_patch()
         ax.add_patch(patch)
     ax.plot(path[:, 0], path[:, 1])
+    plt.xlim([-1 * 0.15, 11 * 0.15])
+    plt.ylim([0 * 0.15, 8 * 0.15])
     plt.show()
 
 
@@ -28,7 +30,7 @@ class AstarPathGenerator:
         if self._global_path == []:
             print("Global Path not found.")
             sys.exit(1)
-        if False:
+        if True:
             plot_global_map(self._global_path, obstacles)
         return self._global_path
 
@@ -45,7 +47,7 @@ class AstarLoSPathGenerator:
     def generate_path(self, sys, obstacles, goal_pos):
         graph = GraphSearch(graph=self._grid, obstacles=obstacles, margin=self._margin)
         path = graph.a_star(sys.get_state()[:2], goal_pos)
-        path = G.reduce_path(path)
+        path = graph.reduce_path(path)
         self._global_path = np.array([p.pos for p in path])
         print(self._global_path)
         if self._global_path == []:
@@ -73,7 +75,7 @@ class ThetaStarPathGenerator:
         if self._global_path == []:
             print("Global Path not found.")
             sys.exit(1)
-        if False:
+        if True:
             plot_global_map(self._global_path, obstacles)
         return self._global_path
 

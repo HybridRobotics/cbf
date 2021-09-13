@@ -11,7 +11,7 @@ class ConstantSpeedTrajectoryGenerator:
         self._num_waypoint = None
         # local path
         self._reference_speed = 0.2
-        self._num_horizon = 4
+        self._num_horizon = 11
         self._local_path_timestep = 0.1
         self._local_trajectory = None
         self._proj_dist_buffer = 0.05
@@ -37,7 +37,7 @@ class ConstantSpeedTrajectoryGenerator:
             curv_direct = curv_vec[0, :] / curv_length[0]
         proj_dist = np.dot(pos - trunc_path[0, :], curv_direct)
 
-        if proj_dist >= curv_length[0] and local_index < self._num_waypoint - 1:
+        if proj_dist >= curv_length[0] - self._proj_dist_buffer and local_index < self._num_waypoint - 1:
             self._global_path_index += 1
             return self.generate_trajectory_internal(pos, global_path)
 
