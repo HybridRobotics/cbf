@@ -38,6 +38,7 @@ class NmpcDbcfOptimizer:
         self.variables = variables
         self.costs = costs
         self.dynamics_opt = dynamics_opt
+        self.solver_times = []
 
     def set_state(self, state):
         self.state = state
@@ -83,11 +84,13 @@ class NmpcDbcfOptimizer:
 
     def add_reference_trajectory_tracking_cost(self, param, reference_trajectory):
         self.costs["reference_trajectory_tracking"] = 0
-        for i in range(param.horizon-1):
+        for i in range(param.horizon - 1):
             x_diff = self.variables["x"][:, i] - reference_trajectory[i, :]
             self.costs["reference_trajectory_tracking"] += ca.mtimes(x_diff.T, ca.mtimes(param.mat_Q, x_diff))
         x_diff = self.variables["x"][:, -1] - reference_trajectory[-1, :]
-        self.costs["reference_trajectory_tracking"] += param.terminal_weight*ca.mtimes(x_diff.T, ca.mtimes(param.mat_Q, x_diff))
+        self.costs["reference_trajectory_tracking"] += param.terminal_weight * ca.mtimes(
+            x_diff.T, ca.mtimes(param.mat_Q, x_diff)
+        )
 
     def add_input_stage_cost(self, param):
         self.costs["input_stage"] = 0
@@ -235,5 +238,6 @@ class NmpcDbcfOptimizer:
         opt_sol = self.opti.solve()
         end_timer = datetime.datetime.now()
         delta_timer = end_timer - start_timer
+        self.solver_times.append(delta_timer.total_seconds())
         print("solver time: ", delta_timer.total_seconds())
         return opt_sol
