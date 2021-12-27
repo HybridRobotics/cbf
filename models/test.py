@@ -40,9 +40,9 @@ def plot_world(simulation, indexes, figure_name="world", local_traj_index=[]):
     # TODO: make this plotting function general applicable to different systems
     degrees_rot = 90
     if control.dcbf_optimizer.MAZE == 1:
-        fig, ax = plt.subplots(figsize=(5.0, 8.3))
+        fig, ax = plt.subplots(figsize=(8.3, 5.0))
     elif control.dcbf_optimizer.MAZE == 2:
-        fig, ax = plt.subplots(figsize=(5.0, 6.7))
+        fig, ax = plt.subplots(figsize=(6.7, 5.0))
     transform = mpl.transforms.Affine2D().rotate_deg(degrees_rot) + ax.transData
     # extract data
     global_paths = simulation._robot._global_planner_logger._paths
@@ -54,21 +54,21 @@ def plot_world(simulation, indexes, figure_name="world", local_traj_index=[]):
     for index in indexes:
         for i in range(simulation._robot._system._geometry._num_geometry):
             polygon_patch = simulation._robot._system._geometry.get_plot_patch(closedloop_traj[index, :], i, 0.25)
-            polygon_patch.set_transform(transform)
+            # polygon_patch.set_transform(transform)
             ax.add_patch(polygon_patch)
     # plot global reference
-    ax.plot(global_path[:, 0], global_path[:, 1], "o--", color="grey", linewidth=1.5, markersize=2, transform=transform)
+    ax.plot(global_path[:, 0], global_path[:, 1], "o--", color="grey", linewidth=1.5, markersize=2)
     # plot closed loop trajectory
     # ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=1, markersize=4, transform=transform)
     # plot obstacles
     for obs in simulation._obstacles:
         obs_patch = obs.get_plot_patch()
-        obs_patch.set_transform(transform)
+        # obs_patch.set_transform(transform)
         ax.add_patch(obs_patch)
     # plot local reference and local optimized trajectories
     for index in local_traj_index:
         local_path = local_paths[index]
-        ax.plot(local_path[:, 0], local_path[:, 1], "-", color="blue", linewidth=3, markersize=4, transform=transform)
+        ax.plot(local_path[:, 0], local_path[:, 1], "-", color="blue", linewidth=3, markersize=4)
         optimized_traj = optimized_trajs[index]
         ax.plot(
             optimized_traj[:, 0],
@@ -77,7 +77,6 @@ def plot_world(simulation, indexes, figure_name="world", local_traj_index=[]):
             color="gold",
             linewidth=3,
             markersize=4,
-            transform=transform,
         )
     # set figure properties
     # ax.set_rasterized(True)
@@ -95,22 +94,30 @@ def plot_world(simulation, indexes, figure_name="world", local_traj_index=[]):
 
 def animate_world(simulation, animation_name="world"):
     # TODO: make this plotting function general applicable to different systems
-    fig, ax = plt.subplots()
-    plt.axis("equal")
+    if control.dcbf_optimizer.MAZE == 1:
+        fig, ax = plt.subplots(figsize=(8.3, 5.0))
+    elif control.dcbf_optimizer.MAZE == 2:
+        fig, ax = plt.subplots(figsize=(6.7, 5.0))
     global_paths = simulation._robot._global_planner_logger._paths
     global_path = global_paths[0]
-    ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1, markersize=4)
+    ax.plot(global_path[:, 0], global_path[:, 1], "bo--", linewidth=1.5, markersize=4)
 
     local_paths = simulation._robot._local_planner_logger._trajs
     local_path = local_paths[0]
-    (reference_traj_line,) = ax.plot(local_path[:, 0], local_path[:, 1])
+    (reference_traj_line,) = ax.plot(local_path[:, 0], local_path[:, 1], "-", color="blue", linewidth=3, markersize=4)
 
     optimized_trajs = simulation._robot._controller_logger._xtrajs
     optimized_traj = optimized_trajs[0]
-    (optimized_traj_line,) = ax.plot(optimized_traj[:, 0], optimized_traj[:, 1])
+    (optimized_traj_line,) = ax.plot(
+        optimized_traj[:, 0],
+        optimized_traj[:, 1],
+        "-",
+        color="gold",
+        linewidth=3,
+        markersize=4,
+    )
 
     closedloop_traj = np.vstack(simulation._robot._system_logger._xs)
-    ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=2, markersize=4)
     for obs in simulation._obstacles:
         obs_patch = obs.get_plot_patch()
         ax.add_patch(obs_patch)
@@ -119,16 +126,22 @@ def animate_world(simulation, animation_name="world"):
     for i in range(simulation._robot._system._geometry._num_geometry):
         robot_patch.append(patches.Polygon(np.zeros((1, 2)), alpha=1.0, closed=True, fc="None", ec="tab:brown"))
         ax.add_patch(robot_patch[i])
+    plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95)
+    plt.tight_layout()
 
     def update(index):
         local_path = local_paths[index]
         reference_traj_line.set_data(local_path[:, 0], local_path[:, 1])
         optimized_traj = optimized_trajs[index]
         optimized_traj_line.set_data(optimized_traj[:, 0], optimized_traj[:, 1])
-        plt.xlabel(str(index))
+        # plt.xlabel(str(index))
         for i in range(simulation._robot._system._geometry._num_geometry):
             polygon_patch_next = simulation._robot._system._geometry.get_plot_patch(closedloop_traj[index, :], i)
             robot_patch[i].set_xy(polygon_patch_next.get_xy())
+        if index == len(closedloop_traj) - 1:
+            ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=3, markersize=4)
+        # plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95)
+        # plt.tight_layout()
 
     anim = animation.FuncAnimation(fig, update, frames=len(closedloop_traj), interval=1000 * 0.1)
     anim.save("animation/" + animation_name + ".mp4", dpi=300, writer=animation.writers["ffmpeg"](fps=10))
@@ -278,8 +291,8 @@ def kinematic_car_rectangle_simulation_test():
     print("min: ", min(robot._controller._optimizer.solver_times))
     print("max: ", max(robot._controller._optimizer.solver_times))
 
-    # animate_world(sim, animation_name=name)
     print("Simulation finished.")
+    animate_world(sim, animation_name=name)
 
 
 def create_env(env_type):
