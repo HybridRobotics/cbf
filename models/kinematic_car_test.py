@@ -6,8 +6,7 @@ from matplotlib import animation
 import matplotlib as mpl
 import statistics as st
 
-import control.dcbf_optimizer
-
+from control.dcbf_optimizer import NmpcDcbfOptimizerParam
 from control.dcbf_controller import NmpcDcbfController
 from models.dubin_car import (
     DubinCarDynamics,
@@ -36,14 +35,14 @@ from planning.trajectory_generator.constant_speed_generator import (
 from sim.simulation import Robot, SingleAgentSimulation
 
 
-def plot_world(simulation, indexes, figure_name="world", local_traj_index=[]):
+def plot_world(simulation, snapshot_indexes, figure_name="world", local_traj_indexes=[], maze_type=None):
     # TODO: make this plotting function general applicable to different systems
-    degrees_rot = 90
-    if control.dcbf_optimizer.MAZE == 1:
+    if maze_type == "maze":
         fig, ax = plt.subplots(figsize=(8.3, 5.0))
-    elif control.dcbf_optimizer.MAZE == 2:
+    elif maze_type == "obl_maze":
         fig, ax = plt.subplots(figsize=(6.7, 5.0))
-    transform = mpl.transforms.Affine2D().rotate_deg(degrees_rot) + ax.transData
+    # degrees_rot = 90
+    # transform = mpl.transforms.Affine2D().rotate_deg(degrees_rot) + ax.transData
     # extract data
     global_paths = simulation._robot._global_planner_logger._paths
     global_path = global_paths[0]
@@ -51,7 +50,7 @@ def plot_world(simulation, indexes, figure_name="world", local_traj_index=[]):
     local_paths = simulation._robot._local_planner_logger._trajs
     optimized_trajs = simulation._robot._controller_logger._xtrajs
     # plot robot
-    for index in indexes:
+    for index in snapshot_indexes:
         for i in range(simulation._robot._system._geometry._num_geometry):
             polygon_patch = simulation._robot._system._geometry.get_plot_patch(closedloop_traj[index, :], i, 0.25)
             # polygon_patch.set_transform(transform)
@@ -66,7 +65,7 @@ def plot_world(simulation, indexes, figure_name="world", local_traj_index=[]):
         # obs_patch.set_transform(transform)
         ax.add_patch(obs_patch)
     # plot local reference and local optimized trajectories
-    for index in local_traj_index:
+    for index in local_traj_indexes:
         local_path = local_paths[index]
         ax.plot(local_path[:, 0], local_path[:, 1], "-", color="blue", linewidth=3, markersize=4)
         optimized_traj = optimized_trajs[index]
@@ -79,24 +78,17 @@ def plot_world(simulation, indexes, figure_name="world", local_traj_index=[]):
             markersize=4,
         )
     # set figure properties
-    # ax.set_rasterized(True)
-    # plt.axis("equal")
     plt.tight_layout()
-    # if control.dcbf_optimizer.MAZE == 1:
-    #     fig.set_size_inches((3.75,6))
-    # elif control.dcbf_optimizer.MAZE == 2:
-    #     fig.set_size_inches((3.75,6))
-    # plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95)
     # save figure
     plt.savefig("figures/" + figure_name + ".eps", format="eps", dpi=500, pad_inches=0)
     plt.savefig("figures/" + figure_name + ".png", format="png", dpi=500, pad_inches=0)
 
 
-def animate_world(simulation, animation_name="world"):
+def animate_world(simulation, animation_name="world", maze_type=None):
     # TODO: make this plotting function general applicable to different systems
-    if control.dcbf_optimizer.MAZE == 1:
+    if maze_type == "maze":
         fig, ax = plt.subplots(figsize=(8.3, 5.0))
-    elif control.dcbf_optimizer.MAZE == 2:
+    elif maze_type == "obl_maze":
         fig, ax = plt.subplots(figsize=(6.7, 5.0))
     global_paths = simulation._robot._global_planner_logger._paths
     global_path = global_paths[0]
@@ -140,31 +132,9 @@ def animate_world(simulation, animation_name="world"):
             robot_patch[i].set_xy(polygon_patch_next.get_xy())
         if index == len(closedloop_traj) - 1:
             ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=3, markersize=4)
-        # plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95)
-        # plt.tight_layout()
 
     anim = animation.FuncAnimation(fig, update, frames=len(closedloop_traj), interval=1000 * 0.1)
     anim.save("animation/" + animation_name + ".mp4", dpi=300, writer=animation.writers["ffmpeg"](fps=10))
-
-
-def dubin_car_simulation_test():
-    start_pos, goal_pos, grid, obstacles = create_env("maze")
-    robot = Robot(
-        DubinCarSystem(
-            state=DubinCarStates(x=np.block([start_pos[:2], np.array([0.0, start_pos[2]])])),
-            geometry=DubinCarGeometry(0.14, 0.08),
-            dynamics=DubinCarDynamics(),
-        )
-    )
-    # Reduce margin (radius) for tighter corners
-    global_path_margin = 0.07
-    robot.set_global_planner(ThetaStarPathGenerator(grid, quad=False, margin=global_path_margin))
-    robot.set_local_planner(ConstantSpeedTrajectoryGenerator())
-    robot.set_controller(NmpcDcbfController(dynamics=DubinCarDynamics()))
-    sim = SingleAgentSimulation(robot, obstacles, goal_pos)
-    sim.run_navigation(20.0)
-    plot_world(sim, np.arange(0, 200, 5))
-    animate_world(sim)
 
 
 def kinematic_car_triangle_simulation_test():
@@ -179,7 +149,7 @@ def kinematic_car_triangle_simulation_test():
     global_path_margin = 0.07
     robot.set_global_planner(ThetaStarPathGenerator(grid, quad=False, margin=global_path_margin))
     robot.set_local_planner(ConstantSpeedTrajectoryGenerator())
-    robot.set_controller(NmpcDcbfController(dynamics=KinematicCarDynamics()))
+    robot.set_controller(NmpcDcbfController(dynamics=KinematicCarDynamics(), opt_param=NmpcDcbfOptimizerParam))
     sim = SingleAgentSimulation(robot, obstacles, goal_pos)
     sim.run_navigation(20.0)
     plot_world(sim, np.arange(0, 200, 5), figure_name="triangle")
@@ -200,77 +170,60 @@ def kinematic_car_pentagon_simulation_test():
     global_path_margin = 0.06
     robot.set_global_planner(ThetaStarPathGenerator(grid, quad=False, margin=global_path_margin))
     robot.set_local_planner(ConstantSpeedTrajectoryGenerator())
-    robot.set_controller(NmpcDcbfController(dynamics=KinematicCarDynamics()))
+    robot.set_controller(NmpcDcbfController(dynamics=KinematicCarDynamics(), opt_param=NmpcDcbfOptimizerParam()))
     sim = SingleAgentSimulation(robot, obstacles, goal_pos)
     sim.run_navigation(20.0)
     plot_world(sim, np.arange(0, 200, 5), figure_name="pentagon")
     animate_world(sim, animation_name="pentagon")
 
 
-def kinematic_car_rectangle_simulation_test():
-    if control.dcbf_optimizer.MAZE == 1:
-        start_pos, goal_pos, grid, obstacles = create_env("maze")
-    elif control.dcbf_optimizer.MAZE == 2:
-        start_pos, goal_pos, grid, obstacles = create_env("obl_maze")
+def kinematic_car_all_shapes_simulation_test(maze_type, robot_shape):
+    start_pos, goal_pos, grid, obstacles = create_env(maze_type)
     geometry_regions = KinematicCarMultipleGeometry()
 
-    # rectangle (terminal_weight = 10.0)
-    if control.dcbf_optimizer.ROBOT == "RECT":
+    if robot_shape == "rectangle":
         geometry_regions.add_geometry(KinematicCarRectangleGeometry(0.15, 0.06, 0.1))
-        if control.dcbf_optimizer.MAZE == 1:
-            snapshot_index = [0, 17, 24, 33, 39, 48, 58, 66, 76, 86, 92, 102, 112, 129]
-            local_traj_index = [0, 24, 33, 48, 66, 92, 112]
-        elif control.dcbf_optimizer.MAZE == 2:
-            snapshot_index = [1, 9, 22, 26, 34, 41, 47, 56, 64, 70, 79, 88, 93, 124, 131, 143, 164]
-            local_traj_index = [1, 19, 47, 70, 93]
-
-    # pentagon (terminal_weight = 2.0, 5.0)
-    if control.dcbf_optimizer.ROBOT == "PENT":
+        if maze_type == "maze":
+            robot_indexes = [0, 17, 24, 33, 39, 48, 58, 66, 76, 86, 92, 102, 112, 129]
+            traj_indexes = [0, 24, 33, 48, 66, 92, 112]
+        elif maze_type == "obl_maze":
+            robot_indexes = [1, 9, 22, 26, 34, 41, 47, 56, 64, 70, 79, 88, 93, 124, 131, 143, 164]
+            traj_indexes = [1, 19, 47, 70, 93]
+    if robot_shape == "pentagon":
         geometry_regions.add_geometry(
             KinematicCarTriangleGeometry(
                 np.array([[0.15, 0.00], [0.03, 0.05], [-0.01, 0.02], [-0.01, -0.02], [0.03, -0.05]])
             )
         )
-        if control.dcbf_optimizer.MAZE == 1:
-            snapshot_index = [2, 15, 33, 43, 50, 61, 69, 81, 99, 111, 125, 130, 142, 164]
-            local_traj_index = [2, 33, 50, 69, 99, 125, 164]
-        elif control.dcbf_optimizer.MAZE == 2:
-            snapshot_index = [0, 11, 23, 41, 53, 62, 69, 78, 83, 92, 110, 113, 138, 151, 164, 185]
-            local_traj_index = [0, 23, 62, 78, 92, 110, 151]
-
-    # triangle (terminal_weight = 2.0)
-    if control.dcbf_optimizer.ROBOT == "TRI":
+        if maze_type == "maze":
+            robot_indexes = [2, 15, 33, 43, 50, 61, 69, 81, 99, 111, 125, 130, 142, 164]
+            traj_indexes = [2, 33, 50, 69, 99, 125, 164]
+        elif maze_type == "obl_maze":
+            robot_indexes = [0, 11, 23, 41, 53, 62, 69, 78, 83, 92, 110, 113, 138, 151, 164, 185]
+            traj_indexes = [0, 23, 62, 78, 92, 110, 151]
+    if robot_shape == "triangle":
         geometry_regions.add_geometry(
             KinematicCarTriangleGeometry(0.75 * np.array([[0.14, 0.00], [-0.03, 0.05], [-0.03, -0.05]]))
         )
-        if control.dcbf_optimizer.MAZE == 1:
-            snapshot_index = [0, 10, 18, 27, 35, 40, 46, 51, 61, 72, 86, 91, 102, 113, 199]
-            local_traj_index = [0, 18, 35, 46, 61, 86, 102]
-        elif control.dcbf_optimizer.MAZE == 2:
-            snapshot_index = [0, 11, 17, 26, 32, 43, 50, 58, 74, 78, 110, 123, 168, 182, 199]
-            local_traj_index = [0, 17, 32, 50, 74, 168]
-
-    # L-shape (terminal_weight = 10.0)
-    if control.dcbf_optimizer.ROBOT == "L_SHAPE":
+        if maze_type == "maze":
+            robot_indexes = [0, 10, 18, 27, 35, 40, 46, 51, 61, 72, 86, 91, 102, 113, 199]
+            traj_indexes = [0, 18, 35, 46, 61, 86, 102]
+        elif maze_type == "obl_maze":
+            robot_indexes = [0, 11, 17, 26, 32, 43, 50, 58, 74, 78, 110, 123, 168, 182, 199]
+            traj_indexes = [0, 17, 32, 50, 74, 168]
+    if robot_shape == "lshape":
         geometry_regions.add_geometry(
             KinematicCarTriangleGeometry(0.4 * np.array([[0, 0.1], [0.02, 0.08], [-0.2, -0.1], [-0.22, -0.08]]))
         )
         geometry_regions.add_geometry(
             KinematicCarTriangleGeometry(0.4 * np.array([[0, 0.1], [-0.02, 0.08], [0.2, -0.1], [0.22, -0.08]]))
         )
-        if control.dcbf_optimizer.MAZE == 1:
-            snapshot_index = [3, 13, 27, 36, 46, 56, 65, 74, 85, 98, 114, 121, 224, 300]
-            local_traj_index = [3, 27, 46, 74, 114, 224]
-        elif control.dcbf_optimizer.MAZE == 2:
-            snapshot_index = [0, 12, 21, 32, 40, 49, 59, 67, 81, 94, 122, 129, 141, 177]
-            local_traj_index = [0, 21, 40, 59, 81, 129]
-
-    # slim rectangle
-    # geometry_regions.add_geometry(KinematicCarRectangleGeometry(0.30, 0.01, 0.10))
-
-    # T-shape
-    # geometry_regions.add_geometry(KinematicCarRectangleGeometry(0.15, 0.06, 0.1))
-    # geometry_regions.add_geometry(KinematicCarTriangleGeometry(np.array([[-0.025, 0.075], [-0.025, -0.075], [0.025, -0.075], [0.025, 0.075]])))
+        if maze_type == "maze":
+            robot_indexes = [3, 13, 27, 36, 46, 56, 65, 74, 85, 98, 114, 121, 224, 299]
+            traj_indexes = [3, 27, 46, 74, 114, 224]
+        elif maze_type == "obl_maze":
+            robot_indexes = [0, 12, 21, 32, 40, 49, 59, 67, 81, 94, 122, 129, 141, 177]
+            traj_indexes = [0, 21, 40, 59, 81, 129]
     robot = Robot(
         KinematicCarSystem(
             state=KinematicCarStates(x=np.block([start_pos[:2], np.array([0.0, start_pos[2]])])),
@@ -281,18 +234,28 @@ def kinematic_car_rectangle_simulation_test():
     global_path_margin = 0.05
     robot.set_global_planner(AstarLoSPathGenerator(grid, quad=False, margin=global_path_margin))
     robot.set_local_planner(ConstantSpeedTrajectoryGenerator())
-    robot.set_controller(NmpcDcbfController(dynamics=KinematicCarDynamics()))
+    opt_param = NmpcDcbfOptimizerParam()
+    # TODO: Wrap these parameters
+    if robot_shape == "rectangle" or robot_shape == "lshape":
+        opt_param.terminal_weight = 10.0
+    elif robot_shape == "pentagon":
+        if maze_type == 1:
+            opt_param.terminal_weight = 2.0
+        elif maze_type == 2:
+            opt_param.terminal_weight = 5.0
+    elif robot_shape == "triangle":
+        opt_param.terminal_weight = 2.0
+    robot.set_controller(NmpcDcbfController(dynamics=KinematicCarDynamics(), opt_param=opt_param))
     sim = SingleAgentSimulation(robot, obstacles, goal_pos)
-    sim.run_navigation(31.0)
-    name = control.dcbf_optimizer.ROBOT + "_" + str(control.dcbf_optimizer.MAZE)
-    plot_world(sim, snapshot_index, figure_name=name, local_traj_index=local_traj_index)
+    sim.run_navigation(30.0)
     print("median: ", st.median(robot._controller._optimizer.solver_times))
     print("std: ", st.stdev(robot._controller._optimizer.solver_times))
     print("min: ", min(robot._controller._optimizer.solver_times))
     print("max: ", max(robot._controller._optimizer.solver_times))
-
     print("Simulation finished.")
-    animate_world(sim, animation_name=name)
+    name = robot_shape + "_" + maze_type
+    plot_world(sim, robot_indexes, figure_name=name, local_traj_indexes=traj_indexes, maze_type=maze_type)
+    animate_world(sim, animation_name=name, maze_type=maze_type)
 
 
 def create_env(env_type):
@@ -371,13 +334,10 @@ def create_env(env_type):
 
 
 if __name__ == "__main__":
-    mazes = [1, 2]
-    robot = ["TRI", "RECT", "PENT", "L_SHAPE"]
-    for m in mazes:
-        for r in robot:
-            control.dcbf_optimizer.MAZE = m
-            control.dcbf_optimizer.ROBOT = r
-            kinematic_car_rectangle_simulation_test()
     # kinematic_car_triangle_simulation_test()
-    # kinematic_car_rectangle_simulation_test()
     # kinematic_car_pentagon_simulation_test()
+    maze_types = ["maze", "obl_maze"]
+    robot_shapes = ["triangle", "rectangle", "pentagon", "lshape"]
+    for maze_type in maze_types:
+        for robot_shape in robot_shapes:
+            kinematic_car_all_shapes_simulation_test(maze_type, robot_shape)

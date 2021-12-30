@@ -6,10 +6,6 @@ import numpy as np
 from models.geometry_utils import *
 
 
-MAZE = 0
-ROBOT = "RANDOM"
-
-
 class NmpcDcbfOptimizerParam:
     def __init__(self):
         self.horizon = 11
@@ -21,15 +17,7 @@ class NmpcDcbfOptimizerParam:
         self.gamma = 0.8
         self.pomega = 10.0
         self.margin_dist = 0.00
-        if ROBOT == "RECT" or ROBOT == "L_SHAPE":
-            self.terminal_weight = 10.0
-        elif ROBOT == "PENT":
-            if MAZE == 1:
-                self.terminal_weight = 2.0
-            elif MAZE == 2:
-                self.terminal_weight = 5.0
-        elif ROBOT == "TRI":
-            self.terminal_weight = 2.0
+        self.terminal_weight = 10.0
 
 
 class NmpcDbcfOptimizer:

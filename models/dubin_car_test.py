@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 
 from control.dcbf_controller import NmpcDcbfController
-from models.dubin_car import *
+from control.dcbf_optimizer import NmpcDcbfOptimizerParam
 from models.geometry_utils import *
 from planning.path_generator.search_path_generator import (
     AstarLoSPathGenerator,
@@ -110,7 +110,7 @@ def dubin_car_controller_test():
     global_path = global_planner.generate_path(sys, obstacles, goal_pos)
     local_planner = ConstantSpeedTrajectoryGenerator()
     local_trajectory = local_planner.generate_trajectory(sys, global_path)
-    controller = NmpcDcbfController(dynamics=DubinCarDynamics())
+    controller = NmpcDcbfController(dynamics=DubinCarDynamics(), opt_param=NmpcDcbfOptimizerParam())
     action = controller.generate_control_input(sys, global_path, local_trajectory, obstacles)
 
 
@@ -127,7 +127,7 @@ def dubin_car_simulation_test():
     global_path_margin = 0.07
     robot.set_global_planner(ThetaStarPathGenerator(grid, quad=False, margin=global_path_margin))
     robot.set_local_planner(ConstantSpeedTrajectoryGenerator())
-    robot.set_controller(NmpcDcbfController(dynamics=DubinCarDynamics()))
+    robot.set_controller(NmpcDcbfController(dynamics=DubinCarDynamics(), opt_param=NmpcDcbfOptimizerParam()))
     sim = SingleAgentSimulation(robot, obstacles, goal_pos)
     sim.run_navigation(40.0)
     plot_world(sim)

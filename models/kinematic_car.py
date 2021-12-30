@@ -27,7 +27,7 @@ class KinematicCarDynamics:
         x_symbol_next = x_symbol[0] + x_symbol[2] * ca.cos(x_symbol[3]) * timestep
         y_symbol_next = x_symbol[1] + x_symbol[2] * ca.sin(x_symbol[3]) * timestep
         v_symbol_next = x_symbol[2] + u_symbol[0] * timestep
-        theta_symbol_next = x_symbol[3] + x_symbol[2] * ca.tan(u_symbol[1]) / 0.1 * timestep
+        theta_symbol_next = x_symbol[3] + x_symbol[2] * ca.tan(u_symbol[1]) / l * timestep
         state_symbol_next = ca.vertcat(x_symbol_next, y_symbol_next, v_symbol_next, theta_symbol_next)
         return ca.Function("dubin_car_dynamics", [x_symbol, u_symbol], [state_symbol_next])
 
