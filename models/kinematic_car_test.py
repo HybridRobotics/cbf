@@ -39,7 +39,7 @@ def plot_world(simulation, snapshot_indexes, figure_name="world", local_traj_ind
     # TODO: make this plotting function general applicable to different systems
     if maze_type == "maze":
         fig, ax = plt.subplots(figsize=(8.3, 5.0))
-    elif maze_type == "obl_maze":
+    elif maze_type == "oblique_maze":
         fig, ax = plt.subplots(figsize=(6.7, 5.0))
     # degrees_rot = 90
     # transform = mpl.transforms.Affine2D().rotate_deg(degrees_rot) + ax.transData
@@ -88,7 +88,7 @@ def animate_world(simulation, animation_name="world", maze_type=None):
     # TODO: make this plotting function general applicable to different systems
     if maze_type == "maze":
         fig, ax = plt.subplots(figsize=(8.3, 5.0))
-    elif maze_type == "obl_maze":
+    elif maze_type == "oblique_maze":
         fig, ax = plt.subplots(figsize=(6.7, 5.0))
     global_paths = simulation._robot._global_planner_logger._paths
     global_path = global_paths[0]
@@ -134,7 +134,7 @@ def animate_world(simulation, animation_name="world", maze_type=None):
             ax.plot(closedloop_traj[:, 0], closedloop_traj[:, 1], "k-", linewidth=3, markersize=4)
 
     anim = animation.FuncAnimation(fig, update, frames=len(closedloop_traj), interval=1000 * 0.1)
-    anim.save("animation/" + animation_name + ".mp4", dpi=300, writer=animation.writers["ffmpeg"](fps=10))
+    anim.save("animations/" + animation_name + ".mp4", dpi=300, writer=animation.writers["ffmpeg"](fps=10))
 
 
 def kinematic_car_triangle_simulation_test():
@@ -186,7 +186,7 @@ def kinematic_car_all_shapes_simulation_test(maze_type, robot_shape):
         if maze_type == "maze":
             robot_indexes = [0, 17, 24, 33, 39, 48, 58, 66, 76, 86, 92, 102, 112, 129]
             traj_indexes = [0, 24, 33, 48, 66, 92, 112]
-        elif maze_type == "obl_maze":
+        elif maze_type == "oblique_maze":
             robot_indexes = [1, 9, 22, 26, 34, 41, 47, 56, 64, 70, 79, 88, 93, 124, 131, 143, 164]
             traj_indexes = [1, 19, 47, 70, 93]
     if robot_shape == "pentagon":
@@ -198,7 +198,7 @@ def kinematic_car_all_shapes_simulation_test(maze_type, robot_shape):
         if maze_type == "maze":
             robot_indexes = [2, 15, 33, 43, 50, 61, 69, 81, 99, 111, 125, 130, 142, 164]
             traj_indexes = [2, 33, 50, 69, 99, 125, 164]
-        elif maze_type == "obl_maze":
+        elif maze_type == "oblique_maze":
             robot_indexes = [0, 11, 23, 41, 53, 62, 69, 78, 83, 92, 110, 113, 138, 151, 164, 185]
             traj_indexes = [0, 23, 62, 78, 92, 110, 151]
     if robot_shape == "triangle":
@@ -208,7 +208,7 @@ def kinematic_car_all_shapes_simulation_test(maze_type, robot_shape):
         if maze_type == "maze":
             robot_indexes = [0, 10, 18, 27, 35, 40, 46, 51, 61, 72, 86, 91, 102, 113, 199]
             traj_indexes = [0, 18, 35, 46, 61, 86, 102]
-        elif maze_type == "obl_maze":
+        elif maze_type == "oblique_maze":
             robot_indexes = [0, 11, 17, 26, 32, 43, 50, 58, 74, 78, 110, 123, 168, 182, 199]
             traj_indexes = [0, 17, 32, 50, 74, 168]
     if robot_shape == "lshape":
@@ -221,7 +221,7 @@ def kinematic_car_all_shapes_simulation_test(maze_type, robot_shape):
         if maze_type == "maze":
             robot_indexes = [3, 13, 27, 36, 46, 56, 65, 74, 85, 98, 114, 121, 224, 299]
             traj_indexes = [3, 27, 46, 74, 114, 224]
-        elif maze_type == "obl_maze":
+        elif maze_type == "oblique_maze":
             robot_indexes = [0, 12, 21, 32, 40, 49, 59, 67, 81, 94, 122, 129, 141, 177]
             traj_indexes = [0, 21, 40, 59, 81, 129]
     robot = Robot(
@@ -297,7 +297,7 @@ def create_env(env_type):
         obstacles.append(RectangleRegion(0.0 * s, 13.0 * s, -1.0 * s, 0.0 * s))
         obstacles.append(RectangleRegion(13.0 * s, 14.0 * s, -1.0 * s, 7.0 * s))
         return start, goal, grid, obstacles
-    elif env_type == "obl_maze":
+    elif env_type == "oblique_maze":
         s = 0.15  # scale of environemtn
         start = np.array([1.0 * s, 1.5 * s, 0.0])
         goal = np.array([8.5 * s, 6.5 * s])
@@ -305,6 +305,7 @@ def create_env(env_type):
         cell_size = 0.2 * s
         grid = (bounds, cell_size)
         obstacles = []
+        # TODO: Overload the constructor of RectangleRegion() 
         obstacles.append(RectangleRegion(-1.0 * s, 0.0 * s, 0.0 * s, 8.0 * s))
         obstacles.append(RectangleRegion(0.0 * s, 10.0 * s, 0.0 * s, 1.0 * s))
         obstacles.append(RectangleRegion(0.0 * s, 8.0 * s, 7.0 * s, 8.0 * s))
@@ -336,7 +337,7 @@ def create_env(env_type):
 if __name__ == "__main__":
     # kinematic_car_triangle_simulation_test()
     # kinematic_car_pentagon_simulation_test()
-    maze_types = ["maze", "obl_maze"]
+    maze_types = ["maze", "oblique_maze"]
     robot_shapes = ["triangle", "rectangle", "pentagon", "lshape"]
     for maze_type in maze_types:
         for robot_shape in robot_shapes:

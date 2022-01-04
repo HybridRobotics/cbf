@@ -68,7 +68,7 @@ def animate_world(simulation):
         robot_patch.set_xy(polygon_patch_next.get_xy())
 
     anim = animation.FuncAnimation(fig, update, frames=len(closedloop_traj), interval=1000 * 0.1)
-    anim.save("animation/world.mp4", dpi=300, writer=animation.writers["ffmpeg"](fps=60))
+    anim.save("animations/world.mp4", dpi=300, writer=animation.writers["ffmpeg"](fps=60))
 
 
 def dubin_car_system_test():
