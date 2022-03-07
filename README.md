@@ -1,7 +1,7 @@
 # cbf
 This repo serves as a toolkit for testing different algorithm for control barrier functions.
 
-**Status:** This repository is still under development, expecting new features/papers and a complete tutorial to explain it. Feel free to raise questions/suggestions through GitHub Issues, if you want to use the current version of this repository. Please watch and star for subscribing further updates.
+**Status:** This repository is still under development, expecting new features/papers and a complete tutorial to explain it. Feel free to raise questions/suggestions through GitHub Issues, if you want to use the current version of this repository. Please watch and star for subscribing further updates which will be related to our latest preprints and published papers.
 
 ### Citing
 If you find this repository useful in your work, please consider citing following work:
