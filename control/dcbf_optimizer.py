@@ -116,7 +116,7 @@ class NmpcDbcfOptimizer:
             self.opti.subject_to(lamb[:, i] >= 0)
             self.opti.subject_to(
                 ca.mtimes((ca.mtimes(mat_A, self.variables["x"][0:2, i + 1]) - vec_b).T, lamb[:, i])
-                >= omega[i] * param.gamma ** (i + 1) * cbf_curr + param.margin_dist
+                >= omega[i] * param.gamma ** (i + 1) * (cbf_curr - param.margin_dist) + param.margin_dist
             )
             temp = ca.mtimes(mat_A.T, lamb[:, i])
             self.opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
@@ -165,7 +165,7 @@ class NmpcDbcfOptimizer:
             self.opti.subject_to(mu[:, i] >= 0)
             self.opti.subject_to(
                 -ca.mtimes(robot_g.T, mu[:, i]) + ca.mtimes((ca.mtimes(mat_A, robot_T) - vec_b).T, lamb[:, i])
-                >= omega[i] * param.gamma ** (i + 1) * cbf_curr + param.margin_dist
+                >= omega[i] * param.gamma ** (i + 1) * (cbf_curr - param.margin_dist) + param.margin_dist
             )
             self.opti.subject_to(
                 ca.mtimes(robot_G.T, mu[:, i]) + ca.mtimes(ca.mtimes(robot_R.T, mat_A.T), lamb[:, i]) == 0
