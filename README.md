@@ -22,6 +22,9 @@ If you find this repository useful in your work, please consider citing followin
 This represents the implementation of the following paper:
 * A. Thirugnanam, J. Zeng, K. Sreenath. "Safety-Critical Control and Planning for Obstacle Avoidance between Polytopes with Control Barrier Functions." *2022 IEEE International Conference on Robotics and Automation (ICRA)*. [[arXiv]](https://arxiv.org/abs/2109.12313) [[Video]](https://youtu.be/2hKlihdERog)
 
+set environment variable :\
+`export PYTHONPATH=$PYTHONPATH:{your_dir_name}/cbf`
+
 Run `python models/kinematic_car_test.py`. This simulates maze navigation (two maze setups) with duality-based obstacle avoidance (four robot shapes including rectangle, pentagon, triangle and l-shape) in the discrete-time domain. The animations and snapshots can be found in folder `animations` and `figures`. An example animation video can be generated as follows,
 
 https://user-images.githubusercontent.com/27001847/147999361-faf3557a-3c87-48ab-aa3a-8830b3d565d5.mp4
